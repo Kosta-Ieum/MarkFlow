@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+echo "▸ Installing dependencies (pnpm)…"
+pnpm install
+
+echo "▸ Generating Prisma client…"
+pnpm --filter @markflow/api prisma:generate || echo "  (prisma generate 건너뜀 — DATABASE_URL/스키마 준비 후 재실행)"
+
+if [ ! -f .env ]; then
+  echo "▸ .env 없음 — .env.example을 복사해 값을 채우세요: cp .env.example .env"
+fi
+
+echo "✔ bootstrap 완료."
