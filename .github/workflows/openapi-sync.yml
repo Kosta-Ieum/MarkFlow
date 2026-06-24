@@ -1,0 +1,54 @@
+name: Sync OpenAPI to API docs repo
+
+# REST 정본(apps/api/openapi.yaml)이 main에 머지되면
+# 배포 전용 저장소 Kosta-Ieum/API 의 markflow-openapi.yaml 로 자동 동기화한다.
+# (그 repo의 index.html이 ./markflow-openapi.yaml 을 로드 → GitHub Pages 자동 재배포)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/openapi.yaml"
+      - "redocly.yaml"
+  workflow_dispatch: {}
+
+# 동시 실행 방지(연속 머지 시 push 충돌 방지)
+concurrency:
+  group: openapi-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout MarkFlow (정본)
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lint OpenAPI (배포 전 게이트)
+        run: npx --yes @redocly/cli@1 lint apps/api/openapi.yaml
+
+      - name: Checkout API docs repo (배포 대상)
+        uses: actions/checkout@v4
+        with:
+          repository: Kosta-Ieum/API
+          token: ${{ secrets.API_REPO_TOKEN }}
+          path: api-repo
+
+      - name: Sync spec file
+        run: cp apps/api/openapi.yaml api-repo/markflow-openapi.yaml
+
+      - name: Commit & push if changed
+        working-directory: api-repo
+        run: |
+          if git diff --quiet -- markflow-openapi.yaml; then
+            echo "변경 없음 — 동기화 skip"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add markflow-openapi.yaml
+          git commit -m "sync: openapi from MarkFlow@${GITHUB_SHA:0:7}"
+          git push

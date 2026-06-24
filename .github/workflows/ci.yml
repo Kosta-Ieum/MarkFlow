@@ -1,0 +1,30 @@
+name: CI
+
+# scripts/check와 동일 게이트: OpenAPI lint + 전 워크스페이스 typecheck.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm 버전은 package.json의 packageManager 필드에서 읽는다.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: OpenAPI lint (REST 정본)
+        run: pnpm openapi:lint
+
+      - name: Typecheck (전 워크스페이스)
+        run: pnpm -r typecheck
