@@ -28,3 +28,6 @@ jobs:
 
       - name: Typecheck (전 워크스페이스)
         run: pnpm -r typecheck
+
+      - name: Build (shared dist/export·계약 산출물 검증)
+        run: pnpm -r build

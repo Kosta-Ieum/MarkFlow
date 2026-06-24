@@ -8,5 +8,8 @@ pnpm openapi:lint
 echo "▸ Typecheck (전 워크스페이스)…"
 pnpm -r typecheck
 
+echo "▸ Build (전 워크스페이스 — shared dist/export·계약 산출물 검증)…"
+pnpm -r build
+
 # TODO(스택 확정 후): lint 추가 — 예) pnpm -r lint
 echo "✔ check 완료."

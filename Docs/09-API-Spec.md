@@ -10,7 +10,7 @@
 
 > **정본 안내** — REST API의 기계 판독 정본은 `apps/api/openapi.yaml`이다. Socket 이벤트·공용 DTO의 정본은 `packages/shared/src/`(`SOCKET_EVENTS` + zod schema)이다. 이 문서는 사람이 읽는 설명 문서이며, 계약 변경 시 정본 파일을 먼저 수정한다(절차 → `api-contract-change` 스킬).
 >
-> 본 명세는 ERD(`08-ERD.md`)와 PRD v1.2 / 화면설계서 v1.0을 정본으로 한다. 인증은 JWT 자체 구현, 권한 가드는 **REST + 실시간 인증 양쪽 서버에서** 수행한다(PRD §6).
+> 이 설명 문서는 ERD(`08-ERD.md`)와 PRD v1.2 / 화면설계서 v1.0을 **참고해 작성**한다(이 문서가 계약 정본은 아니다 — 위 정본 안내 참조). 인증은 JWT 자체 구현, 권한 가드는 **REST + 실시간 인증 양쪽 서버에서** 수행한다(PRD §6).
 
 ---
 
