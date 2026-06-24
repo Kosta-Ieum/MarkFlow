@@ -1,0 +1,13 @@
+{
+  "name": "markflow",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9",
+  "description": "마크다운 노드 기반 실시간 협업 캔버스 (모노레포)",
+  "scripts": {
+    "dev:web": "pnpm --filter @markflow/web dev",
+    "dev:api": "pnpm --filter @markflow/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

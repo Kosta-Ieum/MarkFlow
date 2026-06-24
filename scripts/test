@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# TODO(스택 확정 후): 테스트 러너 연결 — 예) pnpm -r test (vitest 등)
+echo "▸ Tests…"
+echo "  (테스트 러너 미설정 — 스택 확정 후 vitest 등 연결)"

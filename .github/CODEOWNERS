@@ -1,0 +1,22 @@
+# MarkFlow CODEOWNERS
+# 실제 GitHub 핸들로 교체하세요 (TODO). 역할: Docs/11-Team-Roles.md
+# 형식: <경로>  <@핸들 ...>
+
+# 백엔드
+/apps/api/                      # @B2-handle
+/apps/api/src/realtime/         # @B1-handle
+/apps/api/prisma/               # @B2-handle
+
+# 프론트엔드
+/apps/web/                      # @F2-handle
+/apps/web/src/features/canvas/  # @F1-handle
+/apps/web/src/collab/           # @F1-handle
+
+# 공용 계약 (BE+FE 동시 검토)
+/packages/shared/               # @B2-handle @F1-handle
+
+# 문서 · 설정 (팀 리드)
+/Docs/                          # @lead-handle
+/.claude/                       # @lead-handle
+/CLAUDE.md                      # @lead-handle
+/.github/                       # @lead-handle

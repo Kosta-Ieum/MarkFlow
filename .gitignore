@@ -1,0 +1,53 @@
+# ───────── Dependencies ─────────
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+
+# ───────── Build output ─────────
+dist/
+build/
+out/
+*.tsbuildinfo
+.vite/
+apps/web/dist/
+apps/api/dist/
+
+# ───────── Cache ─────────
+.turbo/
+.cache/
+.eslintcache
+coverage/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ───────── Env / secrets ─────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+secrets/
+
+# ───────── Prisma ─────────
+# 생성된 클라이언트(커스텀 output 사용 시) · 로컬 DB 파일
+apps/api/prisma/generated/
+*.db
+*.db-journal
+
+# ───────── Claude Code / 로컬 툴 상태 ─────────
+.claude/settings.local.json
+# oh-my-claudecode 로컬 상태 (세션·노트패드·플랜 등)
+.omc/
+
+# ───────── Editor / OS ─────────
+.DS_Store
+Thumbs.db
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*~
