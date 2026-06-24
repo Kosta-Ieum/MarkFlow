@@ -1,0 +1,6 @@
+# Redocly lint 설정 — REST 정본 apps/api/openapi.yaml 검증 (pnpm openapi:lint / scripts/check)
+rules:
+  # 내부 draft 명세라 라이선스 표기는 불필요.
+  info-license: off
+  # localhost는 로컬 개발 서버로 의도된 항목.
+  no-server-example.com: off

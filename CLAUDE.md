@@ -7,7 +7,9 @@
 ## Canonical sources (이 파일에 복제 금지 — 아래를 정본으로 참조)
 - 설계 문서: `Docs/` (`01-Proposal` ~ `10-Team-Roles`)
 - 데이터 모델: `Docs/08-ERD.md` ↔ `apps/api/prisma/schema.prisma`
-- API 규격: `Docs/09-API-Spec.md`
+- REST API 정본(기계 판독): `apps/api/openapi.yaml`
+- Socket 이벤트·공용 DTO 정본: `packages/shared/src/` (`SOCKET_EVENTS` + zod schema)
+- API 설명 문서(정본 아님): `Docs/09-API-Spec.md`
 - 아키텍처: `Docs/06-Backend-Architecture.md` · `Docs/07-Frontend-Architecture.md`
 - 역할/경계: `Docs/10-Team-Roles.md`
 - 경로별 상세 불변식: `.claude/rules/`
@@ -27,7 +29,7 @@
 - 생성물 직접 편집 금지: `node_modules/`, `**/dist/`, `apps/api/prisma/migrations/`, Prisma client.
 - push · merge · deploy · 프로덕션 데이터 변경 금지.
 - 스키마 변경은 Prisma 마이그레이션 + 롤백 설명 + `Docs/08-ERD.md` 동시 갱신.
-- `packages/shared` DTO/이벤트 변경은 BE·FE 양쪽 + `Docs/09-API-Spec.md` 동시 갱신.
+- REST 계약 변경은 `apps/api/openapi.yaml`을 먼저 수정(정본). `packages/shared` DTO/이벤트 변경은 `packages/shared/src/`(zod)를 먼저 수정. 둘 다 BE·FE 양쪽 사용처 + `Docs/09-API-Spec.md` 동시 갱신. (절차 → `api-contract-change` 스킬)
 - 권한은 서버가 최종 가드 — REST + Socket **양쪽**. 프론트 비활성화는 UX용.
 - 새 의존성은 기존으로 불가능한 이유를 설명한 뒤 추가.
 

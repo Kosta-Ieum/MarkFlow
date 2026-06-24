@@ -8,6 +8,8 @@
 | Base URL | `/api` (예: `https://api.markflow.app/api`) |
 | 작성일 | 2026-06-24 |
 
+> **정본 안내** — REST API의 기계 판독 정본은 `apps/api/openapi.yaml`이다. Socket 이벤트·공용 DTO의 정본은 `packages/shared/src/`(`SOCKET_EVENTS` + zod schema)이다. 이 문서는 사람이 읽는 설명 문서이며, 계약 변경 시 정본 파일을 먼저 수정한다(절차 → `api-contract-change` 스킬).
+>
 > 본 명세는 ERD(`08-ERD.md`)와 PRD v1.2 / 화면설계서 v1.0을 정본으로 한다. 인증은 JWT 자체 구현, 권한 가드는 **REST + 실시간 인증 양쪽 서버에서** 수행한다(PRD §6).
 
 ---
@@ -469,7 +471,7 @@ const socket = io(WS_URL, { auth: { token: accessToken } });
 4. 끊김 시 Socket.io 자동 재연결 → 재입장 시 `sync:resync`로 상태 복구.
 
 > DB는 영속 스냅샷·활동 로그·휴지통의 단일 소스. 잔버그 3종(① 초기싱크 ② 재접속 ③ 이벤트 순서)을 우선 안정화.
-> **차선(Liveblocks)**: 막히면 동일 CollabAPI 뒤에 Liveblocks를 꽂는다(룸=`project:<id>` 동일, 권한 가드는 `liveblocks-auth` 엔드포인트로 이전). UI 코드는 불변.
+> **차선(Liveblocks)**: 정본은 Socket.io 직접 구현이며, Liveblocks는 막혔을 때만 동일 CollabAPI 뒤에 꽂는 대체재다(룸=`project:<id>` 동일). 전환 시에만 룸 인증용 `POST /realtime/liveblocks-auth`를 openapi에 추가하고 권한 가드를 그 엔드포인트로 옮긴다. 현재 계약(정본)에는 포함하지 않는다. UI 코드는 불변.
 
 ---
 

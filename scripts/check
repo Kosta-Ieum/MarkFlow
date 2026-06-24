@@ -2,6 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+echo "▸ OpenAPI lint (apps/api/openapi.yaml)…"
+pnpm openapi:lint
+
 echo "▸ Typecheck (전 워크스페이스)…"
 pnpm -r typecheck
 

@@ -8,6 +8,10 @@
     "dev:web": "pnpm --filter @markflow/web dev",
     "dev:api": "pnpm --filter @markflow/api dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "openapi:lint": "redocly lint apps/api/openapi.yaml"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^1.25.0"
   }
 }
