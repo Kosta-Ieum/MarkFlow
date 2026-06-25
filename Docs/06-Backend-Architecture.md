@@ -94,7 +94,7 @@ prisma/
   migrations/
 ```
 
-**소유권**: `modules/*` · `shared/` · `prisma/` = **B2(REST/도메인)** / `realtime/*` = **B1(소켓)**. B1은 service를 **호출만** 한다.
+**소유권**: 백엔드 전체 = **BE 1명**(`modules/*`·`shared/`·`prisma/`·`realtime/*`). REST 컨트롤러와 소켓 게이트웨이는 둘 다 같은 service를 **호출만** 한다(전송≠로직).
 
 ---
 
@@ -121,7 +121,7 @@ export const nodeService = {
 ```
 
 ```ts
-// REST (B2) — modules/nodes/node.controller.ts
+// REST 전송 — modules/nodes/node.controller.ts
 router.post('/projects/:projectId/nodes', auth, async (req, res, next) => {
   try {
     const node = await nodeService.create(parseCreateNode(req), actorOf(req));
@@ -131,7 +131,7 @@ router.post('/projects/:projectId/nodes', auth, async (req, res, next) => {
 ```
 
 ```ts
-// Socket (B1) — realtime/canvas.gateway.ts
+// Socket 전송 — realtime/canvas.gateway.ts
 socket.on('node:add', async (payload, ack) => {
   const node = await nodeService.create(payload, actorOf(socket));   // ← 같은 함수
   socket.to(roomOf(payload.projectId)).emit('node:added', node);     // 타인에게 broadcast
@@ -216,15 +216,18 @@ export async function assertPermission(projectId, userId, min: Role) {
 
 ## 8. 역할 소유권 맵
 
-| 영역 | 폴더 | 담당 |
-| --- | --- | --- |
-| Prisma 스키마·마이그레이션 | `prisma/` | **B2** |
-| 인증·프로젝트·멤버·권한 | `modules/auth,projects,members`, `shared/permission` | **B2** |
-| 노드·엣지·채팅·활동 서비스 + REST | `modules/nodes,edges,chat,activity` | **B2** |
-| 소켓 인프라·게이트웨이·프레즌스 | `realtime/*` | **B1** |
-| 공유 DTO·에러·설정 | `shared/dto`, `lib`, `config` | **B2 작성 · B1 사용** |
+백엔드는 **BE 1명**이 전부 담당한다. 폴더는 구현 순서(권장)로 정리:
 
-> Day 1 합의: ① Prisma 스키마 ② `assertPermission` 시그니처 ③ 서비스 시그니처(node/edge/chat/activity) ④ DTO 형태. 이 4개가 B1·B2의 계약이다. B2가 1주차에 **스키마 + 서비스 스텁**을 먼저 내주면 B1이 막히지 않는다(그 전엔 DB 불필요한 연결·룸·커서부터).
+| 영역 | 폴더 | 권장 순서 |
+| --- | --- | --- |
+| Prisma 스키마·마이그레이션 | `prisma/` | 1주차 최우선 |
+| 공유 DTO·계약 | `shared/dto`, `packages/shared` | 1주차 최우선(FE 차단 해제) |
+| 인증·프로젝트·멤버·권한 | `modules/auth,projects,members`, `shared/permission` | 1주차 |
+| 노드·엣지·채팅·활동 서비스 + REST | `modules/nodes,edges,chat,activity` | 2주차 |
+| 소켓 인프라·게이트웨이·프레즌스 | `realtime/*` | 3주차(서비스 재사용) |
+| 공통 에러·설정 | `lib`, `config` | 상시 |
+
+> Day 1 합의(BE→FE 계약): ① Prisma 스키마 ② `assertPermission` 시그니처 ③ 서비스 시그니처(node/edge/chat/activity) ④ DTO·CollabAPI 인터페이스. **BE가 1주차에 스키마 + 서비스 스텁 + DTO를 최우선 제공**하면 FE 둘이 막히지 않는다. 소켓(`realtime/*`)은 서비스 레이어를 재사용하므로 REST보다 뒤에 와도 된다.
 
 ---
 

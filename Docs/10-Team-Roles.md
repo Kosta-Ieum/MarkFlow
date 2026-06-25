@@ -4,42 +4,41 @@
 | --- | --- |
 | 문서 유형 | 역할 분담 / 협업 가이드 |
 | 프로젝트 | MarkFlow — 마크다운 노드 기반 실시간 협업 캔버스 |
-| 버전 / 상태 | v1.0 / Draft |
-| 팀 / 기간 | 4인 (백엔드 2 · 프론트 2) / 4주 |
-| 작성일 | 2026-06-24 |
+| 버전 / 상태 | v1.1 / Draft (3인 체제 반영) |
+| 팀 / 기간 | 3인 (백엔드 1 · 프론트 2) / 4주 |
+| 작성일 | 2026-06-25 |
 
-> 한 줄 정의 — 백엔드는 **소켓 ↔ REST**, 프론트는 **캔버스/실시간 ↔ 셸/콘텐츠**로 가른다. 짝(BE-B1↔FE-F1 실시간, BE-B2↔FE-F2 도메인)이 맞아 통합이 매끄럽다.
+> 한 줄 정의 — **BE 1명이 백엔드 전체(소켓 + REST + 도메인)**, 프론트는 **F1 캔버스/실시간 ↔ F2 셸/콘텐츠**로 가른다. BE가 단독 크리티컬 패스이므로, 1주차에 계약(스키마·DTO·서비스)을 최우선으로 내주고 FE 둘이 그 위에서 병렬 진행한다.
 
 ---
 
 ## 0. 구성 한눈에
 
-| 코드 | 역할 | 핵심 영역 | 짝 |
+| 코드 | 역할 | 핵심 영역 | 주 협업 |
 | --- | --- | --- | --- |
-| **B1** | 백엔드 · 실시간 | Socket.io 게이트웨이·동기화·락·프레즌스 | F1 |
-| **B2** | 백엔드 · 도메인 | Prisma·서비스·REST·권한 | F2 |
-| **F1** | 프론트 · 캔버스/실시간 | React Flow·노드·`useCollaboration`·멀티커서 | B1 |
-| **F2** | 프론트 · 셸/콘텐츠 | 인증·프로젝트·MD에디터·채팅/히스토리 UI | B2 |
+| **BE** | 백엔드 전체 | Prisma·서비스·REST·권한 **+ Socket.io 게이트웨이·동기화·락·프레즌스** | F1·F2 |
+| **F1** | 프론트 · 캔버스/실시간 | React Flow·노드·`useCollaboration`·멀티커서·소프트락 | BE |
+| **F2** | 프론트 · 셸/콘텐츠/패널 | 인증·프로젝트·MD에디터·채팅/히스토리 UI·휴지통 | BE |
+
+> 기존 백엔드 2명(B1 소켓 · B2 도메인)을 **BE 1명으로 통합**. 소켓과 도메인을 한 사람이 맡되, 서비스 레이어 seam 덕분에 소켓·REST가 같은 로직을 공유한다.
 
 ---
 
-## 1. 백엔드
+## 1. 백엔드 — BE (1명)
 
-### 🔌 B1 — 실시간/소켓
-- Socket.io 서버 셋업, 연결 시 JWT 핸드셰이크
-- 룸(`project:<id>`) 입장·`sync:init`/`sync:resync`
-- `cursor:move`(≈50ms throttle), `node:*`·`edge:*` 동기화 broadcast
-- 소프트 락(`lock:acquire/release`), 채팅 broadcast(`chat:*`)
-- 끊김 재접속·이벤트 순서 안정화 (잔버그 3종)
-- 소켓 측 권한 가드(공유 `assertPermission` 사용)
-- 폴더: `realtime/*`
+기존 B1(소켓) + B2(도메인)을 통합. **서비스 레이어를 먼저** 만들면 REST·소켓이 그대로 재사용한다.
 
-### 🗄️ B2 — REST/도메인
+**도메인/REST**
 - **Prisma 스키마 + 마이그레이션 (단일 소유)**
-- 인증(JWT)·프로젝트·멤버/권한·노드/엣지/채팅/활동로그 서비스 + REST
-- 휴지통(소프트삭제·복구·영구삭제)
-- **서비스 레이어**(B1도 호출) + 공유 권한 헬퍼
-- 폴더: `modules/*`, `shared/*`, `prisma/`
+- 인증(JWT)·프로젝트·멤버/권한·노드/엣지/채팅/활동로그 **서비스 + REST**
+- 휴지통(소프트삭제·복구·영구삭제), 공유 권한 헬퍼 `assertPermission`
+
+**실시간/소켓**
+- Socket.io 서버·JWT 핸드셰이크, 룸(`project:<id>`) 입장·`sync:init`/`sync:resync`
+- `cursor:move`(≈50ms), `node:*`·`edge:*` 동기화 broadcast(서비스 재사용), 소프트 락, 채팅 broadcast
+- 이벤트별 권한 재검사, 잔버그 3종(초기싱크·재접속·순서) 안정화
+
+**폴더**: `prisma/` · `modules/*` · `shared/*` · `realtime/*` (즉 `apps/api` 전체)
 
 ---
 
@@ -65,42 +64,47 @@
 
 ```mermaid
 flowchart LR
-  B1["B1 소켓 게이트웨이"] --> SVC["서비스 레이어 (B2 소유)"]
-  B2["B2 REST 컨트롤러"] --> SVC
-  SVC --> DB[("PostgreSQL")]
-  F1["F1 useCollaboration"] -. WebSocket .-> B1
+  subgraph BE_box["BE (백엔드 1명)"]
+    GW["소켓 게이트웨이"] --> SVC["서비스 레이어"]
+    REST["REST 컨트롤러"] --> SVC
+    SVC --> DB[("PostgreSQL")]
+  end
+  F1["F1 useCollaboration"] -. WebSocket .-> GW
   F2["F2 채팅/히스토리 UI"] -. "collab 훅 소비" .-> F1
-  F2 -. REST .-> B2
+  F2 -. REST .-> REST
 ```
 
-- **백엔드 seam = 서비스 레이어**: 소켓 핸들러·REST 컨트롤러가 같은 `nodeService.create()` 호출 → 로직·권한·로그 단일화.
+- **백엔드 seam = 서비스 레이어**(BE 내부): 소켓 핸들러·REST 컨트롤러가 같은 `nodeService.create()` 호출 → 로직·권한·로그 단일화. *소켓·도메인을 한 사람이 맡아도 중복 구현이 없도록 하는 장치.*
 - **프론트 seam = CollabAPI**: F1이 `useCollaboration` 소유, F2는 그걸 가져다 채팅·프레즌스 UI를 그림.
 
 ---
 
 ## 4. Day 1 합의 — 4대 계약
 
-이 4가지를 1일차에 확정해야 4명이 병렬로 막힘없이 진행한다.
+BE가 1일차에 아래를 확정·제공해야 FE 둘이 막힘없이 병렬 진행한다.
 
 | # | 계약 | 소유 | 사용 |
 | --- | --- | --- | --- |
-| 1 | **Prisma 스키마** (`08-ERD.md`/`.dbml` 기준) | B2 | 전원 |
-| 2 | **`assertPermission(projectId, userId, minRole)`** | B2 | B1·B2 |
-| 3 | **서비스 시그니처** (node/edge/chat/activity) | B2 | B1·B2 |
-| 4 | **DTO 타입 + CollabAPI 인터페이스** | B2(DTO)·F1(CollabAPI) | 전원 |
+| 1 | **Prisma 스키마** (`08-ERD.md`/`.dbml` 기준) | BE | 전원 |
+| 2 | **`assertPermission(projectId, userId, minRole)`** | BE | BE |
+| 3 | **서비스 시그니처** (node/edge/chat/activity) | BE | BE |
+| 4 | **DTO 타입 + CollabAPI 인터페이스** | BE(DTO)·F1(CollabAPI) | 전원 |
 
 ---
 
 ## 5. 주차별 진행 (4주)
 
-| 주차 | B1 (소켓) | B2 (도메인) | F1 (캔버스/실시간) | F2 (셸/콘텐츠) |
-| --- | --- | --- | --- | --- |
-| 1주 | 소켓 셋업·룸·**커서**(DB 불필요) | **스키마·서비스 스텁**·인증·프로젝트 REST | React Flow·노드 카드·store(로컬 CRUD) | API 클라이언트·인증·프로젝트 리스트 |
-| 2주 | `sync:init`·노드/엣지 동기화 | 저장·휴지통·영구삭제·권한 헬퍼 | 휴지통 드래그·debounce 저장 | MD 상세 에디터·휴지통 패널 |
-| 3주 | **소프트락·채팅 broadcast·resync** | 채팅 REST·ActivityLog API | **멀티커서·소프트락·재접속** | **채팅·히스토리 패널**(collab 훅 소비) |
-| 4주 | 잔버그 3종 안정화 | 권한 가드 양면 검증 | 통합·성능 | 랜딩·권한별 UI·폴리시 |
+| 주차 | BE (백엔드 전체) | F1 (캔버스/실시간) | F2 (셸/콘텐츠) |
+| --- | --- | --- | --- |
+| 1주 | **스키마·DTO·서비스 스텁**·인증·프로젝트 REST | React Flow·노드 카드·store(로컬 CRUD) | API 클라이언트·인증·프로젝트 리스트 |
+| 2주 | 노드/엣지 REST·저장·휴지통·영구삭제·활동로그 | 캔버스↔DB 연동·휴지통 드래그·debounce 저장 | MD 상세 에디터·프로젝트 휴지통 |
+| 3주 | **Socket.io 서버·동기화·소프트락·채팅·재접속** | **소켓 클라·멀티커서·소프트락 UI** | **채팅·히스토리 패널**(collab 훅 소비) |
+| 4주 | 히스토리 API·권한 양면·잔버그 안정화 | 캔버스 성능·실시간 마감 | 히스토리 탭·랜딩·권한별 UI |
 
-> **의존성**: B1·F1은 B2의 스키마·서비스·DTO가 나와야 DB를 만진다. → **B2가 1주차에 스키마 + 서비스 스텁 + DTO를 최우선 제공**. 그 전까지 B1은 커서·룸(DB 불필요), F1은 로컬 state 캔버스부터.
+> **의존성**: F1·F2는 BE의 스키마·서비스·DTO가 나와야 통합한다. → **BE가 1주차에 계약(스키마+서비스 스텁+DTO)을 최우선 제공**. 그 전까지 F1은 로컬 state 캔버스, F2는 셸·토큰부터 선행.
+> **부하**: BE 단독이므로 3주차 소켓이 병목 → **F1이 소켓 클라이언트/오버레이를 분담**, 막히면 Liveblocks 차선(CollabAPI 뒤) 전환. P2(채팅 FAB 등)는 후순위.
+
+상세 일정·이슈는 **Linear**(IEUM)에서 관리.
 
 ---
 
@@ -108,10 +112,11 @@ flowchart LR
 
 | 리스크 | 1차 대응 담당 |
 | --- | --- |
-| 실시간 디버깅 지연 | B1 / F1 (막히면 D가 Liveblocks 차선 병렬) |
-| 권한 우회 | B2 (REST+Socket 양면 가드) |
+| 실시간 디버깅 지연 | BE / F1 (막히면 Liveblocks 차선 전환) |
+| BE 단독 병목 | BE 1주차 계약 우선·F1 소켓 분담·P2 후순위 |
+| 권한 우회 | BE (REST+Socket 양면 가드) |
 | 캔버스 성능 | F1 (노드 가상화) |
-| 영구삭제 사고 | F2 확인 모달 / B2 권한 제한 |
+| 영구삭제 사고 | F2 확인 모달 / BE 권한 제한 |
 
 상세 → `05-Tech-Spec.md §11`.
 
@@ -121,5 +126,6 @@ flowchart LR
 
 - 백엔드 아키텍처 — `06-Backend-Architecture.md`
 - 프론트엔드 아키텍처 — `07-Frontend-Architecture.md`
+- 일정·이슈 — **Linear** (IEUM)
 - 기술 설명서 — `05-Tech-Spec.md` / 기능정의서 — `03-Feature-Spec.md`
 - API 명세서 — `09-API-Spec.md` / 데이터 모델 — `08-ERD.md`

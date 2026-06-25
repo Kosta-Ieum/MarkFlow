@@ -1,15 +1,41 @@
 #!/usr/bin/env bash
+# 한 번에 셋업: .env 복사 → 설치 → DB 자동 → Prisma → git lb 별칭.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "▸ Installing dependencies (pnpm)…"
+# 1) .env
+[ -f .env ] || { cp .env.example .env; echo "▸ .env 생성(.env.example 복사) — 비밀값은 .env에만"; }
+
+# 2) 의존성
+echo "▸ 의존성 설치…"
 pnpm install
 
-echo "▸ Generating Prisma client…"
-pnpm --filter @markflow/api prisma:generate || echo "  (prisma generate 건너뜀 — DATABASE_URL/스키마 준비 후 재실행)"
-
-if [ ! -f .env ]; then
-  echo "▸ .env 없음 — .env.example을 복사해 값을 채우세요: cp .env.example .env"
+# 3) DB — 5432 안 열려 있으면 Docker로 자동 기동(없으면 안내)
+if ! (exec 3<>/dev/tcp/127.0.0.1/5432) 2>/dev/null; then
+  if command -v docker >/dev/null 2>&1; then
+    echo "▸ Postgres 미감지 → Docker로 기동(markflow-db)…"
+    docker start markflow-db >/dev/null 2>&1 || docker run --name markflow-db \
+      -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=markflow -p 5432:5432 -d postgres:16 >/dev/null
+    for _ in $(seq 1 20); do (exec 3<>/dev/tcp/127.0.0.1/5432) 2>/dev/null && break; sleep 1; done
+    echo "  Postgres 준비됨"
+  else
+    echo "⚠ Postgres·Docker 둘 다 없음 — DB 준비 후 ./scripts/bootstrap 재실행"
+  fi
+else
+  echo "▸ Postgres 감지(5432) — 기존 사용"
 fi
 
-echo "✔ bootstrap 완료."
+# 4) Prisma (클라이언트 + 마이그레이션 있으면 적용)
+echo "▸ Prisma…"
+pnpm --filter @markflow/api prisma:generate >/dev/null 2>&1 || true
+if pnpm --filter @markflow/api exec prisma migrate deploy >/dev/null 2>&1; then
+  echo "  마이그레이션 적용됨"
+else
+  echo "  (마이그레이션 없음 — BE 작업 후 자동 적용)"
+fi
+
+# 5) git lb 별칭
+git config alias.lb '!bash scripts/lb.sh' 2>/dev/null || true
+
+echo ""
+echo "✔ 완료!   실행: pnpm dev   ·   Claude: /onboard <BE|F1|F2>"

@@ -19,4 +19,4 @@ Check:
 - 호환성: shared DTO/이벤트 변경 시 BE·FE 양쪽 + `Docs/09-API-Spec.md` 정합.
 - 테스트 충분성.
 
-Return: severity별 발견사항 + **차단/비차단** 구분. 자기 승인 금지 — 사람 CODEOWNER가 최종.
+Return: severity별 발견사항 + **차단/비차단** 구분. 자기 승인 금지 — 사람 리뷰어가 최종 승인.

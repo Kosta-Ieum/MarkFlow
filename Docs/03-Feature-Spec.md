@@ -1,4 +1,4 @@
-v1.1 · Draft  |  4인 / 4주  |  React + Socket.io(직접 구현) + PostgreSQL(Prisma, Node/Edge 정규화) · v1.2(PRD v1.3 정합)
+v1.1 · Draft  |  3인 / 4주  |  React + Socket.io(직접 구현) + PostgreSQL(Prisma, Node/Edge 정규화) · v1.2(PRD v1.3 정합)
 
 | Page ID | 구분 | 1 Path | 2 Path | 3 Path | 서비스/기능 정의 | 필수 데이터 | Type | 우선순위 | 비고 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

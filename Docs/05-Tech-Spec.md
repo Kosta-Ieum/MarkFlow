@@ -5,7 +5,7 @@
 | 문서 유형 | 기술 설명서 (Technical Specification) |
 | 프로젝트 | MarkFlow — 마크다운 노드 기반 실시간 협업 캔버스 |
 | 버전 / 상태 | v1.0 / Draft (PRD v1.3 · 기획서 v1.2 · ERD v1.1 · API v1.1 정합) |
-| 팀 / 기간 | 4인 / 4주 |
+| 팀 / 기간 | 3인 / 4주 |
 | 작성일 | 2026-06-24 |
 
 > 본 문서는 MarkFlow의 **기술 구현 기준**을 정의한다. 화면·기능은 PRD/기능정의서, 데이터는 ERD, API 규격은 API 명세서, 백엔드 내부 구조는 ARCHITECTURE를 정본으로 하며, 본 문서는 이들을 **한 장으로 묶는 상위 기술 개요**다.
@@ -207,12 +207,11 @@ Controller / Gateway   →   Service   →   Prisma
 
 | 담당 | 영역 | 주요 산출 |
 | --- | --- | --- |
-| BE-B1 | 실시간/소켓 | `realtime/*`, 게이트웨이·프레즌스·락·동기화 |
-| BE-B2 | REST/도메인 | Prisma 스키마, `modules/*`, 서비스 레이어, 권한 |
-| FE-F1 | 캔버스/실시간 | React Flow, 노드 카드, `useCollaboration`, 멀티커서·락 UI, Zustand |
-| FE-F2 | 셸/콘텐츠/패널 | 인증·프로젝트리스트, MD 상세 에디터, 채팅·히스토리·휴지통 UI, API 클라이언트 |
+| **BE** | 백엔드 전체 | `prisma/`·`modules/*`·`shared/*`·`realtime/*` — Prisma·REST·서비스·권한 + Socket.io 게이트웨이·프레즌스·락·동기화 (소켓+도메인 통합) |
+| **FE-F1** | 캔버스/실시간 | React Flow, 노드 카드, `useCollaboration`, 멀티커서·락 UI, Zustand |
+| **FE-F2** | 셸/콘텐츠/패널 | 인증·프로젝트리스트, MD 상세 에디터, 채팅·히스토리·휴지통 UI, API 클라이언트 |
 
-> Day 1 계약: ① Prisma 스키마 ② `assertPermission` ③ 서비스 시그니처 ④ DTO·CollabAPI 인터페이스. 이 4개가 BE/FE 분배의 접합면이다.
+> Day 1 계약: ① Prisma 스키마 ② `assertPermission` ③ 서비스 시그니처 ④ DTO·CollabAPI 인터페이스. 이 4개가 BE↔FE 분배의 접합면이다. **BE가 단독 크리티컬 패스**이므로 1주차에 계약을 최우선 제공한다.
 
 ---
 
@@ -220,11 +219,12 @@ Controller / Gateway   →   Service   →   Prisma
 
 | # | 리스크 | 상황 | 대응 | 담당 | 우선순위 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 실시간 디버깅 지연 | 잔버그 3종(초기싱크·재접속·이벤트순서) | CollabAPI 추상화로 Liveblocks 차선책 병렬 준비, 3주차 고정 | BE-B1 / FE-F1 | 높음 |
-| 2 | 동시 텍스트 편집 충돌 | 한 노드 동시 편집 시 손실 | 소프트 락(한 노드 한 명) → 충돌 구조적 회피(CRDT 미사용) | BE-B1 / FE-F1 | 높음 |
-| 3 | 권한 우회 | 프론트만 비활성화 시 API 직접 호출 | REST+Socket 양쪽 서버 가드 의무화(`assertPermission`) | BE-B2 | 중간 |
+| 1 | 실시간 디버깅 지연 | 잔버그 3종(초기싱크·재접속·이벤트순서) | CollabAPI 추상화로 Liveblocks 차선책 병렬 준비, 3주차 고정 | BE / FE-F1 | 높음 |
+| 2 | 동시 텍스트 편집 충돌 | 한 노드 동시 편집 시 손실 | 소프트 락(한 노드 한 명) → 충돌 구조적 회피(CRDT 미사용) | BE / FE-F1 | 높음 |
+| 3 | 권한 우회 | 프론트만 비활성화 시 API 직접 호출 | REST+Socket 양쪽 서버 가드 의무화(`assertPermission`) | BE | 중간 |
 | 4 | 캔버스 성능 저하 | 노드 수 증가 시 React Flow 렌더 | 노드 가상화 활용, 필요 시 노드 수 가이드 | FE-F1 | 중간 |
-| 5 | 영구삭제 사고 | 복구 불가 데이터 손실 | 확인 모달 필수 + 소유자/에디터 권한 제한 | FE-F2 / BE-B2 | 중간 |
+| 5 | 영구삭제 사고 | 복구 불가 데이터 손실 | 확인 모달 필수 + 소유자/에디터 권한 제한 | FE-F2 / BE | 중간 |
+| 6 | **BE 단독 병목** | 백엔드 1명이 소켓+도메인 전담 | 1주차 계약 최우선·P2 후순위·3주차 F1 페어, 막히면 Liveblocks | BE / 전체 | 높음 |
 
 ---
 
@@ -232,9 +232,9 @@ Controller / Gateway   →   Service   →   Prisma
 
 | 주차 | 목표 | 주요 작업 | 담당 |
 | --- | --- | --- | --- |
-| 1주 | 인증 + 프로젝트 + 캔버스 기본 | JWT 회원가입/로그인, Express REST 구조, Prisma 모델링, React Flow 노드·연결 | BE-B2·FE-F1·F2 |
-| 2주 | MD 노드 + 저장 + 휴지통 | @uiw/react-md-editor, 접기/펼치기, **Node/Edge 정규화 저장 + debounce**, 소프트삭제·복구·영구삭제 | FE-F1·F2·BE-B2 |
-| 3주 | 실시간 협업(하이라이트) | Socket.io 룸·`sync:init`, 멀티커서(50ms), 노드 동기화(LWW), 소프트락, 채팅 (막히면 Liveblocks) | BE-B1·FE-F1 |
+| 1주 | 인증 + 프로젝트 + 캔버스 기본 | JWT 회원가입/로그인, Express REST 구조, Prisma 모델링, React Flow 노드·연결 | BE·FE-F1·F2 |
+| 2주 | MD 노드 + 저장 + 휴지통 | @uiw/react-md-editor, 접기/펼치기, **Node/Edge 정규화 저장 + debounce**, 소프트삭제·복구·영구삭제 | BE·FE-F1·F2 |
+| 3주 | 실시간 협업(하이라이트) | Socket.io 룸·`sync:init`, 멀티커서(50ms), 노드 동기화(LWW), 소프트락, 채팅 (막히면 Liveblocks) | BE·FE-F1 |
 | 4주 | 활동로그 + 통합 + 발표 | 히스토리 타임라인, 통합 테스트·버그(잔버그 3종), 데모 (여유 시 export) | 전체 |
 
 > 진행 원칙 — ① 캔버스+노드(정체성) → ② 저장+휴지통(안정 CRUD) → ③ 실시간(하이라이트). Day 1에 BE가 Prisma 스키마+서비스 스텁을 먼저 내주면 FE/소켓이 막히지 않음.

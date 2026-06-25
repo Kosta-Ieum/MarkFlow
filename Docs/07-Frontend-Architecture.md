@@ -4,11 +4,39 @@
 | --- | --- |
 | 문서 유형 | 프론트엔드 아키텍처 설계 |
 | 프로젝트 | MarkFlow — 마크다운 노드 기반 실시간 협업 캔버스 |
-| 버전 / 상태 | v1.0 / Draft |
-| 작성일 | 2026-06-24 |
-| 스택 | React + TypeScript + Vite + React Flow + Zustand + Tailwind + Socket.io-client |
+| 버전 / 상태 | v1.1 / Draft (스택 확정 반영) |
+| 작성일 | 2026-06-25 |
+| 스택 | React 18 · TS · Vite · React Flow · Zustand · TanStack Query · Tailwind · Radix · socket.io-client (상세 → 아래 기술 스택) |
 
 > 한 줄 정의 — **레이어드 + 추상화 아키텍처**. 소켓·REST 같은 전송 계층을 `useCollaboration`(CollabAPI)·API 클라이언트 뒤에 숨기고, 모든 상태는 **Zustand 단일 스토어**로 모은다. 컴포넌트는 전송을 모르고 store만 구독한다. 백엔드(`06-Backend-Architecture.md`)의 "로직≠전송" 원칙과 대칭.
+
+---
+
+## 기술 스택 (확정)
+
+> 코어는 `apps/web`에 반영됨. 추가분은 본 문서에서 확정(2026-06-25). 색·간격은 화면설계서 §1 디자인 토큰을 Tailwind config에 주입한다.
+
+| 레이어 | 선택 | 비고 |
+| --- | --- | --- |
+| 베이스 | **React 18 · TypeScript 5.5 · Vite 5** | |
+| 캔버스 | **@xyflow/react** (React Flow 12) | 노드·엣지·팬/줌/미니맵/fitView |
+| 전역 상태 | **Zustand** | nodes/edges/presence/messages 단일 진실원 |
+| 라우팅 | **react-router-dom 6** | 인증 가드 포함 |
+| 실시간 | **socket.io-client** | `useCollaboration`(CollabAPI) 뒤 — 정본 Socket.io |
+| 마크다운 | **@uiw/react-md-editor** | 노드 에디터 + 미리보기 |
+| 스타일 | **Tailwind CSS 3** | 디자인 토큰(화면설계서 §1) 주입 |
+| REST 서버상태 | **TanStack Query v5** | 프로젝트 목록·인증·히스토리·멤버·채팅 로드/캐싱 *(캔버스 실시간은 소켓→Zustand라 제외)* |
+| 폼 | **react-hook-form + @hookform/resolvers** | `@markflow/shared` zod 스키마 재사용 |
+| 검증 | **zod** (`@markflow/shared`) | DTO·소켓 payload·폼 공용 |
+| UI 프리미티브 | **Radix UI** (dialog·dropdown-menu·tabs·tooltip·avatar) | 모달·컨텍스트 메뉴·패널 탭 (무스타일 + Tailwind) |
+| 아이콘 | **lucide-react** | |
+| 시간 표기 | **dayjs** | 상대시간(채팅·히스토리) |
+| throttle/debounce | **무의존 커스텀 훅** | 커서 ≈50ms · 저장 ≈2s |
+| 린트/포맷 | **ESLint** (typescript-eslint·react-hooks) **+ Prettier** | `.claude/hooks/post-edit-check.sh`와 정합 |
+| 단위 테스트 | **Vitest + Testing Library** | Vite 네이티브 |
+| E2E | **Playwright** | 멀티탭 실시간(커서·동기화·락) 데모 검증 |
+
+**일부러 제외** — Redux/MobX(Zustand로 충분) · MUI/AntD/Chakra(커스텀 디자인 토큰과 충돌) · CSS-in-JS · Storybook · i18n · axios(fetch + TanStack Query로 대체)
 
 ---
 
