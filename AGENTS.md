@@ -14,6 +14,6 @@
 - 경계를 넘는 변경(shared·공개 API)은 양쪽 + 문서 동시 갱신.
 
 ## 금지
-- push / merge / deploy / 프로덕션 데이터 변경
+- merge / deploy / 프로덕션 데이터 변경 / `main` 직접 push / force-push (feature 브랜치 push + PR 생성은 허용, merge는 사람 승인)
 - 생성물(migrations, prisma client, dist) 편집
 - 비밀(.env, secrets) 읽기

@@ -9,7 +9,9 @@
       "Bash(pnpm -r typecheck*)",
       "Bash(git status*)",
       "Bash(git diff*)",
-      "Bash(git log*)"
+      "Bash(git log*)",
+      "Bash(git push*)",
+      "Bash(gh pr create*)"
     ],
     "ask": [
       "Bash(git commit*)",
@@ -23,7 +25,10 @@
       "Edit(./**/dist/**)",
       "Edit(./apps/api/prisma/migrations/**)",
       "Edit(./node_modules/**)",
-      "Bash(git push*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * main*)",
+      "Bash(git push * master*)",
       "Bash(gh pr merge*)",
       "Bash(git reset --hard*)"
     ]
