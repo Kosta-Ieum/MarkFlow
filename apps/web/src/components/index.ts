@@ -1,2 +1,3 @@
-// 공용 UI 컴포넌트 (헤더·버튼·모달)
-// TODO: 구현 (와이어프레임 스텁)
+// 공용 UI 컴포넌트 (헤더·셸 등)
+export { GlobalHeader } from "./GlobalHeader";
+export { AppShell } from "./AppShell";

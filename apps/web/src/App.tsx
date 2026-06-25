@@ -1,2 +1,6 @@
-// 루트 컴포넌트 + 라우팅
-// TODO: 구현 (와이어프레임 스텁)
+// 루트 컴포넌트 — 라우트 트리 렌더 (라우트 정의는 routes/)
+import { AppRoutes } from "./routes";
+
+export function App() {
+  return <AppRoutes />;
+}
