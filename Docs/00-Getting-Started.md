@@ -124,7 +124,7 @@ git push -u origin HEAD
 - **`.claude/agents/`** — implementer·reviewer·migration-reviewer
 - **`.claude/skills/`** — pr-ready·db-migration·api-contract-change
 - **`.claude/commands/`** — `/onboard`·`/branch`
-- **`.claude/settings.json` 가드** — push·merge·`.env` 읽기·생성물 편집 차단 (push는 사람이)
+- **`.claude/settings.json` 가드** — merge·`main` push·force-push·`.env` 읽기·생성물 편집 차단 (feature 브랜치 push + PR 생성은 에이전트 허용, merge는 사람 승인)
 
 ### 4.5 문서 어디를 언제 보나
 | 상황 | 문서 |
@@ -176,7 +176,7 @@ Docs/         설계·일정·컨벤션 문서
 
 ## 7. 꼭 지킬 것 (가드)
 
-- **push·merge는 사람이** 직접(Claude Code 가드 차단). `main` 직접 push 금지.
+- **merge는 사람이** 직접 승인(Claude Code 가드 차단). `main` 직접 push·force-push 금지. (feature 브랜치 push + PR 생성은 에이전트 허용.)
 - 생성물 편집 금지: `node_modules/`·`**/dist/`·`apps/api/prisma/migrations/`·prisma client.
 - 권한은 **REST + Socket 양쪽** 서버에서. 프론트 비활성화는 UX용.
 - 계약(`packages/shared`·`openapi.yaml`) 변경은 BE·FE 동시 + 문서 갱신.
