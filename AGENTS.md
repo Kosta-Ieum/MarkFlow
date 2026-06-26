@@ -20,5 +20,6 @@
 
 ## 강제 (도구 무관 — Claude·자율 에이전트·사람 모두)
 - 공용 **git hooks**(`.githooks/`, `core.hooksPath`로 등록 — `./scripts/bootstrap`이 자동): pre-commit = `main` 직접 커밋·생성물·비밀·기존 마이그레이션 수정 차단 / pre-push = `main` push 차단 + `./scripts/check`.
+- **역할 스코프 가드(도구 무관)**: `./scripts/set-role.sh <BE|F1|F2>`가 `git config markflow.role`을 기록 → pre-commit이 범위 밖 경로 커밋 차단(BE↔`apps/web`, F1·F2↔`apps/api`). Claude의 `.claude/settings.local.json`과 동일 효과를 자율 에이전트·맨손 git에도 적용.
 - 최종 방어선은 **GitHub 브랜치 보호 + PR 리뷰** — hook은 `--no-verify`로 우회 가능한 보조 가드다. 우회하지 말 것.
 - Claude Code 전용 `.claude/settings.json` 가드는 다른 에이전트엔 적용되지 않는다 → 위 hook과 브랜치 보호가 공통 강제선이다.
