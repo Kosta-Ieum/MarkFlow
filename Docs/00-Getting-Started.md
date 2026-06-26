@@ -141,7 +141,7 @@ git push -u origin HEAD
 ## 5. 모노레포 구조 (요약)
 
 ```
-apps/api      백엔드 (Express + Socket.io + Prisma)         → BE
+apps/api      백엔드 (NestJS + Socket.io + Prisma)          → BE
 apps/web      프론트 (React + Vite + React Flow + Zustand)   → F1 · F2
 packages/shared  공용 타입/DTO/소켓 이벤트 (계약)            → 전원
 Docs/         설계·일정·컨벤션 문서

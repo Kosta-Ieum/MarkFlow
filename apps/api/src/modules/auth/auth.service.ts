@@ -1,2 +1,2 @@
-// 회원가입·로그인·비밀번호 해시·토큰 발급
-// TODO: 구현 (와이어프레임 스텁)
+// AuthService (@Injectable) — REST·WS 공용 seam — 회원가입·로그인·비밀번호 해시·토큰 발급
+// TODO: 구현

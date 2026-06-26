@@ -1,2 +1,2 @@
-// 멤버십 로직
-// TODO: 구현 (와이어프레임 스텁)
+// MemberService (@Injectable) — REST·WS 공용 seam — 멤버십 로직
+// TODO: 구현

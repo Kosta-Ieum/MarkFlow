@@ -1,2 +1,2 @@
-// assertPermission(projectId, userId, minRole) — REST·소켓 공용
-// TODO: 구현 (와이어프레임 스텁)
+// assertPermission(projectId, userId, minRole) — REST·WS 공용(서비스/가드에서 호출)
+// TODO: 구현

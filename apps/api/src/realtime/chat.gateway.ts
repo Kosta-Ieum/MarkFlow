@@ -1,2 +1,2 @@
-// chat: 이벤트 핸들러
-// TODO: 구현 (와이어프레임 스텁)
+// ChatGateway (@WebSocketGateway) — chat:send broadcast → chatService 재사용
+// TODO: 구현

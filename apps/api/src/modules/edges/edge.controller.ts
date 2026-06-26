@@ -1,2 +1,2 @@
-// 엣지 REST 라우트
-// TODO: 구현 (와이어프레임 스텁)
+// EdgeController (@Controller("projects/:projectId/edges")) — 엣지 REST 라우트
+// TODO: 구현

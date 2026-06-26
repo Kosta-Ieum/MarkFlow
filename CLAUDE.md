@@ -23,7 +23,7 @@
 - 경로별 상세 불변식: `.claude/rules/`
 
 ## 구조
-- `apps/api` — 백엔드 (Express + Socket.io + Prisma)
+- `apps/api` — 백엔드 (NestJS + Socket.io + Prisma)
 - `apps/web` — 프론트 (React + Vite + React Flow + Zustand + Tailwind)
 - `packages/shared` — BE↔FE 공용 타입/DTO/소켓 이벤트 (계약)
 
