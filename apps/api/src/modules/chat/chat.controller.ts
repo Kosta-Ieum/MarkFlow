@@ -1,2 +1,2 @@
-// 채팅 조회 라우트
-// TODO: 구현 (와이어프레임 스텁)
+// ChatController (@Controller("projects/:projectId/chat")) — 채팅 조회 라우트
+// TODO: 구현

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# MarkFlow 공용 pre-push 가드 — 도구 무관(Claude·자율 에이전트·사람 모두 적용).
+# 등록: git config core.hooksPath .githooks  (./scripts/bootstrap이 자동 등록)
+# 최종 방어선은 GitHub 브랜치 보호 + PR 리뷰 — hook은 보조 가드(--no-verify로 우회 가능).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha> (push되는 각 ref)
+while read -r _localref _localsha remoteref _remotesha; do
+  case "$remoteref" in
+    refs/heads/main | refs/heads/master)
+      echo "✖ '$remoteref'에 직접 push 금지 — PR로 머지하세요." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# CI 동일 검증 (긴급 우회: MARKFLOW_SKIP_CHECK=1 git push)
+if [ "${MARKFLOW_SKIP_CHECK:-}" = "1" ]; then
+  echo "▸ pre-push: MARKFLOW_SKIP_CHECK=1 → ./scripts/check 생략"
+else
+  echo "▸ pre-push: ./scripts/check 실행 (CI와 동일 · 우회: MARKFLOW_SKIP_CHECK=1)…"
+  ./scripts/check
+fi
+
+exit 0

@@ -23,7 +23,7 @@
 - 경로별 상세 불변식: `.claude/rules/`
 
 ## 구조
-- `apps/api` — 백엔드 (Express + Socket.io + Prisma)
+- `apps/api` — 백엔드 (NestJS + Socket.io + Prisma)
 - `apps/web` — 프론트 (React + Vite + React Flow + Zustand + Tailwind)
 - `packages/shared` — BE↔FE 공용 타입/DTO/소켓 이벤트 (계약)
 
@@ -36,7 +36,7 @@
 
 ## Non-negotiable rules
 - 생성물 직접 편집 금지: `node_modules/`, `**/dist/`, `apps/api/prisma/migrations/`, Prisma client.
-- push · merge · deploy · 프로덕션 데이터 변경 금지.
+- merge · deploy · 프로덕션 데이터 변경 · `main` 직접 push · force-push 금지. (feature 브랜치 push + PR 생성은 에이전트 허용 — merge는 사람이 승인 후.)
 - 스키마 변경은 Prisma 마이그레이션 + 롤백 설명 + `Docs/08-ERD.md` 동시 갱신.
 - REST 계약 변경은 `apps/api/openapi.yaml`을 먼저 수정(정본). `packages/shared` DTO/이벤트 변경은 `packages/shared/src/`(zod)를 먼저 수정. 둘 다 BE·FE 양쪽 사용처 + `Docs/09-API-Spec.md` 동시 갱신. (절차 → `api-contract-change` 스킬)
 - 권한은 서버가 최종 가드 — REST + Socket **양쪽**. 프론트 비활성화는 UX용.

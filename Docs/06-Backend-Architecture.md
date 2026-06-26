@@ -6,7 +6,7 @@
 | 프로젝트 | MarkFlow — 마크다운 노드 기반 실시간 협업 캔버스 |
 | 버전 / 상태 | v1.0 / Draft |
 | 작성일 | 2026-06-24 |
-| 스택 | Node.js + Express + Socket.io + Prisma + PostgreSQL + TypeScript |
+| 스택 | Node.js + NestJS + Socket.io + Prisma + PostgreSQL + TypeScript |
 
 > 한 줄 정의 — **레이어드(서비스) 아키텍처**. 비즈니스 로직을 전송 계층(REST/Socket)에서 분리해, REST 컨트롤러와 Socket 핸들러가 **같은 서비스 함수**를 호출한다. 풀 클린 아키텍처의 격식(Entity/UseCase/Repository 인터페이스/DI)은 4주 MVP 범위에서 채택하지 않는다.
 
@@ -27,21 +27,28 @@
 ```mermaid
 flowchart TD
   subgraph Transport[전송 계층 — 입출력만]
-    REST["REST Controller<br/>(Express router)"]
-    WS["Socket Gateway<br/>(Socket.io handler)"]
+    REST["REST Controller<br/>(@Controller)"]
+    WS["Socket Gateway<br/>(@WebSocketGateway)"]
+  end
+  subgraph Guard[인증·에러]
+    GUARD["JwtAuthGuard · WsJwtGuard"]
+    FILTER["ExceptionFilter<br/>(AppException → 표준 포맷)"]
   end
   subgraph Domain[도메인 계층 — 핵심]
-    SVC["Service<br/>(비즈니스 로직 + 권한 + 트랜잭션)"]
+    SVC["Service<br/>(@Injectable: 비즈니스 로직 + 권한 + 트랜잭션)"]
     PERM["shared/permission<br/>assertPermission()"]
     ACT["activityService<br/>(ActivityLog 기록)"]
   end
   subgraph Data[데이터 계층]
-    PRISMA["Prisma Client"]
+    PRISMA["PrismaService<br/>(@Injectable, OnModuleInit)"]
     DB[("PostgreSQL")]
   end
 
-  REST --> SVC
-  WS --> SVC
+  REST --> GUARD
+  WS --> GUARD
+  GUARD --> SVC
+  REST -.-> FILTER
+  WS -.-> FILTER
   SVC --> PERM
   SVC --> ACT
   SVC --> PRISMA
@@ -51,9 +58,9 @@ flowchart TD
 
 | 계층 | 책임 | 금지 |
 | --- | --- | --- |
-| **Controller / Gateway** | HTTP/WS 입출력, DTO 검증, 서비스 호출, 응답·브로드캐스트 | Prisma 직접 호출 ✗, 권한 if문 ✗, 비즈니스 로직 ✗ |
-| **Service** | 비즈니스 로직, 권한 검사, 트랜잭션, ActivityLog | HTTP/WS 객체(req/res/socket) 의존 ✗ |
-| **Prisma** | DB 접근 | — |
+| **Controller(`@Controller`) / Gateway(`@WebSocketGateway`)** | HTTP/WS 입출력, DTO 검증, 서비스 호출, 응답·브로드캐스트 | Prisma 직접 호출 ✗, 권한 if문 ✗, 비즈니스 로직 ✗ |
+| **Service(`@Injectable` provider)** | 비즈니스 로직, 권한 검사, 트랜잭션, ActivityLog | HTTP/WS 객체(req/res/socket) 의존 ✗ |
+| **PrismaService** | DB 접근 | — |
 
 ---
 
@@ -61,40 +68,45 @@ flowchart TD
 
 ```
 src/
-  lib/
-    prisma.ts            # PrismaClient 싱글턴
-    jwt.ts               # sign/verify
-    errors.ts            # AppError(code,status) + 에러 매핑
+  main.ts                # NestFactory.create(AppModule) + enableCors + listen(PORT)
+  app.module.ts          # 루트 모듈(@Module) — 도메인 모듈·PrismaModule·gateway 등록
   config/
     env.ts               # 환경변수 로드·검증(zod)
-  middleware/
-    auth.ts              # JWT 검증 → req.user
-    error-handler.ts     # AppError → 표준 에러 응답(09-API-Spec.md §0.3)
+  prisma/
+    prisma.service.ts    # PrismaClient(@Injectable, OnModuleInit)
+    prisma.module.ts     # @Global — PrismaService 전역 제공
+  common/
+    guards/
+      jwt-auth.guard.ts  # JwtAuthGuard — JWT 검증 → request.user (REST)
+    filters/
+      app-exception.filter.ts  # ExceptionFilter — AppException → 표준 에러 응답(09-API-Spec.md §0.3)
+    app.exception.ts     # AppException(code, status)
   shared/
     permission.ts        # assertPermission(projectId, userId, minRole)  ← REST·Socket 공용
-    dto/                 # zod 스키마(요청 검증, 양쪽 재사용)
+    dto/
+      index.ts           # shared zod 스키마 재export(요청 검증, 양쪽 재사용)
   modules/
-    auth/        auth.controller.ts   auth.service.ts
-    projects/    project.controller.ts project.service.ts
-    members/     member.controller.ts member.service.ts
-    nodes/       node.controller.ts   node.service.ts      # ← 공유 seam
-    edges/       edge.controller.ts   edge.service.ts      # ← 공유 seam
-    chat/        chat.controller.ts   chat.service.ts      # ← 공유 seam
-    activity/    activity.controller.ts activity.service.ts
+    auth/        auth.controller.ts   auth.service.ts      (auth.module.ts)
+    projects/    project.controller.ts project.service.ts  (projects.module.ts)
+    members/     member.controller.ts member.service.ts    (members.module.ts)
+    nodes/       node.controller.ts   node.service.ts       (nodes.module.ts)   # ← 공유 seam
+    edges/       edge.controller.ts   edge.service.ts       (edges.module.ts)   # ← 공유 seam
+    chat/        chat.controller.ts   chat.service.ts       (chat.module.ts)    # ← 공유 seam
+    activity/    activity.controller.ts activity.service.ts (activity.module.ts)
   realtime/
-    socket.ts            # io 부트스트랩 + 인증 핸드셰이크
-    canvas.gateway.ts    # node:/edge:/cursor:/lock: 이벤트 → service 호출
-    chat.gateway.ts      # chat: 이벤트 → chatService 호출
+    canvas.gateway.ts    # @WebSocketGateway — node:/edge:/cursor:/lock: 이벤트 → service 호출
+    chat.gateway.ts      # @WebSocketGateway — chat: 이벤트 → chatService 호출
+    ws-jwt.guard.ts      # WsJwtGuard — WS 핸드셰이크 JWT 검증 → socket.data.user
     presence.ts          # 커서·소프트락(in-memory, DB 불필요)
     rooms.ts             # roomOf(projectId) = `project:<id>`
-  app.ts                 # express 앱(라우터·미들웨어 조립)
-  server.ts              # http 서버 + socket 부트스트랩
 prisma/
   schema.prisma          # 08-ERD.md/08-ERD.dbml 기준
   migrations/
 ```
 
-**소유권**: 백엔드 전체 = **BE 1명**(`modules/*`·`shared/`·`prisma/`·`realtime/*`). REST 컨트롤러와 소켓 게이트웨이는 둘 다 같은 service를 **호출만** 한다(전송≠로직).
+> Controller/Gateway 1쌍당 `<도메인>.module.ts`로 묶어 `app.module.ts`에 등록한다. Socket.io는 `@nestjs/platform-socket.io` 기본 IoAdapter로 같은 HTTP 서버에 attach된다.
+
+**소유권**: 백엔드 전체 = **BE 1명**(`modules/*`·`shared/`·`prisma/`·`realtime/*`). REST 컨트롤러와 소켓 게이트웨이는 둘 다 같은 service(`@Injectable` provider)를 **호출만** 한다(전송≠로직).
 
 ---
 
@@ -104,10 +116,13 @@ prisma/
 
 ```ts
 // modules/nodes/node.service.ts  — 전송 수단에 무관(seam)
-export const nodeService = {
+@Injectable()
+export class NodeService {
+  constructor(private prisma: PrismaService) {}
+
   async create(input: CreateNodeInput, actor: Actor) {
     await assertPermission(input.projectId, actor.userId, 'EDITOR');     // 권한도 여기
-    return prisma.$transaction(async (tx) => {                            // 변경 + 로그 = 1 트랜잭션
+    return this.prisma.$transaction(async (tx) => {                       // 변경 + 로그 = 1 트랜잭션
       const node = await tx.node.create({ data: input });
       await activityService.record(tx, {
         projectId: input.projectId, userId: actor.userId,
@@ -115,28 +130,39 @@ export const nodeService = {
       });
       return node;
     });
-  },
+  }
   // update(MOVE/UPDATE 판별) / softDelete(+엣지 물리삭제) / restore / purge ...
-};
+}
 ```
 
 ```ts
 // REST 전송 — modules/nodes/node.controller.ts
-router.post('/projects/:projectId/nodes', auth, async (req, res, next) => {
-  try {
-    const node = await nodeService.create(parseCreateNode(req), actorOf(req));
-    res.status(201).json(node);
-  } catch (e) { next(e); }
-});
+@Controller('projects/:projectId/nodes')
+@UseGuards(JwtAuthGuard)
+export class NodeController {
+  constructor(private nodeService: NodeService) {}
+
+  @Post()
+  create(@Param('projectId') projectId: string, @Body() body, @Req() req) {
+    return this.nodeService.create(parseCreateNode(projectId, body), actorOf(req));
+  }
+}
 ```
 
 ```ts
 // Socket 전송 — realtime/canvas.gateway.ts
-socket.on('node:add', async (payload, ack) => {
-  const node = await nodeService.create(payload, actorOf(socket));   // ← 같은 함수
-  socket.to(roomOf(payload.projectId)).emit('node:added', node);     // 타인에게 broadcast
-  ack?.({ ok: true, node });
-});
+@WebSocketGateway()
+@UseGuards(WsJwtGuard)
+export class CanvasGateway {
+  constructor(private nodeService: NodeService) {}        // ← 같은 provider 주입
+
+  @SubscribeMessage('node:add')
+  async onNodeAdd(@MessageBody() payload, @ConnectedSocket() socket) {
+    const node = await this.nodeService.create(payload, actorOf(socket));   // ← 같은 함수
+    socket.to(roomOf(payload.projectId)).emit('node:added', node);          // 타인에게 broadcast
+    return { ok: true, node };                                               // ack
+  }
+}
 ```
 
 > 결과: 노드가 REST로 들어오든 소켓으로 들어오든 **권한 검사·DB 반영·ActivityLog가 동일**하게 처리된다.
@@ -149,15 +175,15 @@ socket.on('node:add', async (payload, ack) => {
 
 - **연결 1개 · 룸 1개**: `room = project:<projectId>`. 채팅·캔버스를 **분리하지 않고** 같은 룸에서 이벤트 이름으로 구분(화면설계서 §3.3 "채팅=캔버스 룸").
 - **네임스페이스 분리 안 함**: 기본 네임스페이스 + room으로 충분.
-- **핸들러 파일만 분리**: `canvas.gateway.ts` / `chat.gateway.ts`가 같은 socket에 등록.
+- **게이트웨이 파일만 분리**: `canvas.gateway.ts` / `chat.gateway.ts`(둘 다 `@WebSocketGateway`)가 기본 네임스페이스·같은 룸에서 동작. Socket.io는 `@nestjs/platform-socket.io` 기본 IoAdapter로 부트스트랩된다.
 
 ```ts
-// realtime/socket.ts
-io.use(authHandshake);                      // JWT 1회 검증 → socket.data.user
-io.on('connection', (socket) => {
-  registerCanvasGateway(socket, io);
-  registerChatGateway(socket, io);
-});
+// realtime/canvas.gateway.ts (chat.gateway.ts도 동일 패턴)
+@WebSocketGateway()
+@UseGuards(WsJwtGuard)                       // 핸드셰이크 JWT 검증 → socket.data.user
+export class CanvasGateway {
+  @SubscribeMessage('node:add') /* ... node:/edge:/cursor:/lock: ... */
+}
 ```
 
 | prefix | 이벤트 | 영속화 |
@@ -183,15 +209,15 @@ export async function assertPermission(projectId, userId, min: Role) {
   const m = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId, userId } },
   });
-  if (!m) throw new AppError('FORBIDDEN', 403);
-  if (rank(m.role) < rank(min)) throw new AppError('FORBIDDEN', 403);  // VIEWER<EDITOR<OWNER
+  if (!m) throw new AppException('FORBIDDEN', 403);
+  if (rank(m.role) < rank(min)) throw new AppException('FORBIDDEN', 403);  // VIEWER<EDITOR<OWNER
 }
 ```
 
 | 지점 | 적용 |
 | --- | --- |
-| REST | `auth` 미들웨어(JWT) + 서비스 진입부 `assertPermission` |
-| Socket | 핸드셰이크에서 JWT 검증·룸 입장 role 확인 + **변경 이벤트마다** 서비스 진입부에서 재검사 |
+| REST | `JwtAuthGuard`(JWT) + 서비스 진입부 `assertPermission` |
+| Socket | `WsJwtGuard` 핸드셰이크 JWT 검증·룸 입장 role 확인 + **변경 이벤트마다** 서비스 진입부에서 재검사 |
 
 > 권한은 **서비스 진입부**에서 검사하므로, 전송 계층이 무엇이든 자동으로 가드된다.
 
@@ -207,10 +233,10 @@ export async function assertPermission(projectId, userId, min: Role) {
 
 ## 7. 에러 처리 · 검증 · 설정
 
-- **에러**: 서비스는 `AppError(code, status)` throw → `error-handler` 미들웨어가 표준 포맷으로 변환(09-API-Spec.md §0.3). Socket은 `ack({ ok:false, error })`로 반환.
-- **검증**: `shared/dto`에 zod 스키마 1벌 정의 → controller·gateway에서 재사용(REST body = socket payload 동일 형태).
-- **설정**: `config/env.ts`에서 `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`(예: 7d), `PORT`, `CORS_ORIGIN`을 zod로 검증 후 주입.
-- **부트스트랩**: `server.ts`에서 Express(app) + http 서버 + Socket.io를 같은 포트에 attach.
+- **에러**: 서비스는 `AppException(code, status)` throw → `ExceptionFilter`(`common/filters/app-exception.filter.ts`)가 표준 포맷으로 변환(09-API-Spec.md §0.3). Socket은 `ack({ ok:false, error })`로 반환.
+- **검증**: `shared/dto`에 zod 스키마 1벌 정의 → controller·gateway에서 재사용(REST body = socket payload 동일 형태). `ValidationPipe` 또는 핸들러 진입부에서 `schema.parse()`.
+- **설정**: `config/env.ts`에서 `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`(예: 7d), `PORT`, `CORS_ORIGIN`을 zod로 검증 후 주입. JWT 발급/검증은 `@nestjs/jwt`.
+- **부트스트랩**: `main.ts`에서 `NestFactory.create(AppModule)` + `enableCors` + `listen(PORT)`. Socket.io는 `@nestjs/platform-socket.io` 기본 IoAdapter로 같은 HTTP 서버에 attach되며, WS 핸드셰이크 인증은 `WsJwtGuard`가 담당.
 
 ---
 
@@ -225,7 +251,7 @@ export async function assertPermission(projectId, userId, min: Role) {
 | 인증·프로젝트·멤버·권한 | `modules/auth,projects,members`, `shared/permission` | 1주차 |
 | 노드·엣지·채팅·활동 서비스 + REST | `modules/nodes,edges,chat,activity` | 2주차 |
 | 소켓 인프라·게이트웨이·프레즌스 | `realtime/*` | 3주차(서비스 재사용) |
-| 공통 에러·설정 | `lib`, `config` | 상시 |
+| 공통 에러·설정·가드 | `common`, `config`, `prisma` | 상시 |
 
 > Day 1 합의(BE→FE 계약): ① Prisma 스키마 ② `assertPermission` 시그니처 ③ 서비스 시그니처(node/edge/chat/activity) ④ DTO·CollabAPI 인터페이스. **BE가 1주차에 스키마 + 서비스 스텁 + DTO를 최우선 제공**하면 FE 둘이 막히지 않는다. 소켓(`realtime/*`)은 서비스 레이어를 재사용하므로 REST보다 뒤에 와도 된다.
 

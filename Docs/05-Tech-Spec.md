@@ -36,7 +36,7 @@ flowchart LR
     Z["Zustand 스토어"]
     COL["useCollaboration(CollabAPI)"]
   end
-  subgraph Server[백엔드 — Node + Express]
+  subgraph Server[백엔드 — Node + NestJS]
     REST["REST API"]
     WS["Socket.io 게이트웨이"]
     SVC["Service 레이어"]
@@ -53,7 +53,7 @@ flowchart LR
   SVC --> DB
 ```
 
-- **단일 페이지 앱(SPA)** + REST + WebSocket. 같은 서버(포트)에서 Express와 Socket.io를 함께 서빙.
+- **단일 페이지 앱(SPA)** + REST + WebSocket. NestJS(+`@nestjs/platform-socket.io`)로 같은 서버(포트)에서 REST와 Socket.io를 함께 서빙.
 - 프론트 상태 단일 진실원 = **Zustand**. React Flow·MD 에디터·실시간 수신이 모두 store를 통함.
 - 실시간 구현체는 **`useCollaboration`(CollabAPI)** 뒤에 은닉 → Socket.io↔Liveblocks 교체 가능.
 
@@ -68,7 +68,7 @@ flowchart LR
 | 마크다운 | @uiw/react-md-editor | 노드 .md 작성/렌더 |
 | 상태 | Zustand | nodes/edges/presence/messages |
 | 스타일 | Tailwind CSS | 디자인 토큰(화면설계서 §1) |
-| 백엔드 | Node.js + Express | REST API |
+| 백엔드 | Node.js + NestJS | REST API (`@nestjs/platform-socket.io`로 WS 동일 서버) |
 | 실시간 | **Socket.io (정본)** / Liveblocks (차선) | 룸·동기화·커서·락·채팅 |
 | DB | PostgreSQL + Prisma | Node/Edge 정규화 |
 | 인증 | JWT (이메일/비밀번호) | 액세스 토큰만 |
@@ -196,10 +196,10 @@ Controller / Gateway   →   Service   →   Prisma
 
 ## 9. 개발 · 배포
 
-- **모노레포(권장)**: `apps/web`(Vite) + `apps/api`(Express) 또는 단순 2-폴더. 타입(노드 DTO)·검증(Zod) 공유.
+- **모노레포(권장)**: `apps/web`(Vite) + `apps/api`(NestJS) 또는 단순 2-폴더. 타입(노드 DTO)·검증(Zod) 공유.
 - **DB 마이그레이션**: Prisma Migrate. 스키마 정본 = `08-ERD.md`/`08-ERD.dbml`. 부분 유니크·CHECK는 raw SQL 마이그레이션 보강.
 - **환경변수**: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `PORT`, `CORS_ORIGIN`.
-- **실행**: API 서버가 Express(app) + http + Socket.io를 같은 포트에 attach.
+- **실행**: `main.ts`에서 NestFactory로 부트스트랩(`enableCors` + `listen`). Socket.io는 `@nestjs/platform-socket.io` 기본 IoAdapter로 같은 HTTP 서버에 attach.
 
 ---
 
@@ -232,7 +232,7 @@ Controller / Gateway   →   Service   →   Prisma
 
 | 주차 | 목표 | 주요 작업 | 담당 |
 | --- | --- | --- | --- |
-| 1주 | 인증 + 프로젝트 + 캔버스 기본 | JWT 회원가입/로그인, Express REST 구조, Prisma 모델링, React Flow 노드·연결 | BE·FE-F1·F2 |
+| 1주 | 인증 + 프로젝트 + 캔버스 기본 | JWT 회원가입/로그인, NestJS 모듈/컨트롤러 REST 구조, Prisma 모델링, React Flow 노드·연결 | BE·FE-F1·F2 |
 | 2주 | MD 노드 + 저장 + 휴지통 | @uiw/react-md-editor, 접기/펼치기, **Node/Edge 정규화 저장 + debounce**, 소프트삭제·복구·영구삭제 | BE·FE-F1·F2 |
 | 3주 | 실시간 협업(하이라이트) | Socket.io 룸·`sync:init`, 멀티커서(50ms), 노드 동기화(LWW), 소프트락, 채팅 (막히면 Liveblocks) | BE·FE-F1 |
 | 4주 | 활동로그 + 통합 + 발표 | 히스토리 타임라인, 통합 테스트·버그(잔버그 3종), 데모 (여유 시 export) | 전체 |

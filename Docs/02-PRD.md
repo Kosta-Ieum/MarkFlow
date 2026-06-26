@@ -237,7 +237,7 @@ flowchart LR
 
 상세는 기술 설명서(Tech Spec) / 데이터 모델(ERD)에서 다룸.
 
-스택: React + TypeScript + Vite, React Flow, @uiw/react-md-editor, Zustand, Tailwind / Node.js + Express, Socket.io(1순위)·Liveblocks(차선) / PostgreSQL + Prisma (Node/Edge 정규화) / JWT 인증.
+스택: React + TypeScript + Vite, React Flow, @uiw/react-md-editor, Zustand, Tailwind / Node.js + NestJS, Socket.io(1순위)·Liveblocks(차선) / PostgreSQL + Prisma (Node/Edge 정규화) / JWT 인증.
 
 확정 결정 기반 추정 엔티티 (ERD에서 확정):
 

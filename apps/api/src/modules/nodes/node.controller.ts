@@ -1,2 +1,2 @@
-// 노드 REST 라우트
-// TODO: 구현 (와이어프레임 스텁)
+// NodeController (@Controller("projects/:projectId/nodes")) — 노드 REST 라우트
+// TODO: 구현

@@ -31,6 +31,10 @@ cat > .claude/settings.local.json <<JSON
 }
 JSON
 
-echo "✔ 역할 '${ROLE}' 적용 → .claude/settings.local.json"
+# 도구 무관 가드: git hook(.githooks/pre-commit)이 읽는 역할도 함께 기록 → 자율 에이전트·맨손 git에도 적용.
+git config markflow.role "${ROLE}"
+
+echo "✔ 역할 '${ROLE}' 적용 → .claude/settings.local.json + git config markflow.role"
 echo "  스코프: ${SCOPE}"
-echo "  (Claude Code 재시작 시 적용. 개인 PC 전용 — git에 올라가지 않음.)"
+echo "  - Claude Code: 재시작 시 적용(개인 PC 전용 — git에 안 올라감)."
+echo "  - git hook(pre-commit): 즉시 적용 — 범위 밖 경로 커밋 차단(모든 도구)."

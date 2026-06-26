@@ -37,5 +37,10 @@ fi
 # 5) git lb 별칭
 git config alias.lb '!bash scripts/lb.sh' 2>/dev/null || true
 
+# 6) 공용 git hooks (도구 무관 강제 — 모든 에이전트·사람·맨손 git)
+git config core.hooksPath .githooks
+chmod +x .githooks/* 2>/dev/null || true
+echo "▸ git hooks 등록(core.hooksPath=.githooks) — pre-commit·pre-push 가드"
+
 echo ""
 echo "✔ 완료!   실행: pnpm dev   ·   Claude: /onboard <BE|F1|F2>"

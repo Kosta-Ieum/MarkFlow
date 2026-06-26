@@ -1,2 +1,2 @@
-// 노드 서비스 (REST·소켓 공용 seam)
-// TODO: 구현 (와이어프레임 스텁)
+// NodeService (@Injectable) — REST·WS 공용 seam — 노드 서비스
+// TODO: 구현
