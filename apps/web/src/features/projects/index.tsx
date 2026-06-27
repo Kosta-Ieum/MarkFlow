@@ -1,6 +1,6 @@
 // IEUM-20: 프로젝트 리스트 화면 (F2-1.4)
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { ProjectSummary, Role } from "@markflow/shared";
 import { ApiError } from "../../lib/api";
 import { useCreateProject, useDeleteProject, useProjects, useRenameProject } from "./useProjects";
@@ -248,6 +248,24 @@ function TrashIcon() {
   );
 }
 
+function TrashLinkIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" />
+    </svg>
+  );
+}
+
 // ── 스켈레톤 ─────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -290,7 +308,16 @@ export function ProjectsPage() {
     <section className="mx-auto max-w-5xl animate-mfup px-6 py-12">
       {/* 헤더 행 */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <h2 className="font-display text-[30px] font-bold text-ink">프로젝트</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="font-display text-[30px] font-bold text-ink">프로젝트</h2>
+          <Link
+            to="/projects/trash"
+            className="inline-flex items-center gap-1 rounded-[10px] px-3 py-1.5 text-xs font-medium text-muted hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          >
+            <TrashLinkIcon />
+            휴지통
+          </Link>
+        </div>
 
         {/* 새 프로젝트 인라인 생성 폼 */}
         <form
