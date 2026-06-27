@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import type { NodeType } from "@markflow/shared";
+import { ChatFab } from "../panel/ChatFab";
 import { useCanvasSnapshot, useNode, useSaveNode } from "./useNodeEditor";
 
 // --- 노드 타입 메타 ---
@@ -302,6 +303,10 @@ export function NodeEditorPage() {
           }}
         />
       </div>
+
+      {/* 우하단 채팅 FAB — §3.3·§4.4.4: 전체화면 에디터에서도 같은 캔버스 채팅방 접근 */}
+      <ChatFab projectId={projectId} />
+      {/* TODO(F1): 캔버스 우하단에도 <ChatFab projectId={projectId} /> 마운트 */}
     </div>
   );
 }
