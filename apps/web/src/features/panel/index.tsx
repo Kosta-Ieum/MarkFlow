@@ -11,6 +11,7 @@ import { queryKeys } from "../../lib/queryKeys";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { ChatThread } from "./ChatThread";
+import { HistoryTimeline } from "./HistoryTimeline";
 
 // ── 패널 ──────────────────────────────────────────────────────────────────────
 
@@ -94,12 +95,11 @@ export function ChatPanel({ projectId, onCollapse }: ChatPanelProps) {
         </div>
       ) : (
         <div
-          className="flex flex-1 items-center justify-center px-4"
+          className="flex flex-1 flex-col overflow-hidden"
           role="tabpanel"
           aria-label="히스토리"
         >
-          {/* TODO(IEUM-40): 활동 히스토리(ActivityLog) 패널 */}
-          <p className="text-sm text-muted">준비 중입니다.</p>
+          <HistoryTimeline projectId={projectId} />
         </div>
       )}
     </aside>

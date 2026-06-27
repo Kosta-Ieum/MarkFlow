@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import type { NodeType } from "@markflow/shared";
+import { canEdit } from "../../lib/permissions";
 import { ChatFab } from "../panel/ChatFab";
 import { useCanvasSnapshot, useNode, useSaveNode } from "./useNodeEditor";
 
@@ -96,7 +97,8 @@ export function NodeEditorPage() {
   const { mutateAsync: saveNode } = useSaveNode(projectId, nodeId);
 
   const role = snapshot?.project.role;
-  const isReadOnly = role === "VIEWER";
+  // role 미확정(로딩 중)이면 읽기 전용으로 방어. canEdit는 OWNER|EDITOR.
+  const isReadOnly = role === undefined || !canEdit(role);
 
   // 로컬 편집 상태
   const [title, setTitle] = useState("");
