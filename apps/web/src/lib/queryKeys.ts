@@ -1,0 +1,5 @@
+// TanStack Query 키 팩토리 (IEUM-20 프로젝트 목록 쿼리 대비)
+export const queryKeys = {
+  projects: ["projects"] as const,
+  project: (id: string) => ["projects", id] as const,
+} as const;
