@@ -110,6 +110,24 @@ export const RefreshResponseSchema = z.object({
   accessToken: z.string(),
 });
 
+// --- Email OTP (회원가입 이메일 인증 / openapi: SendCode/VerifyEmail Request·Response) ---
+export const SendCodeRequestSchema = z.object({
+  email: z.string().email(),
+});
+
+export const SendCodeResponseSchema = z.object({
+  sent: z.boolean(),
+});
+
+export const VerifyEmailRequestSchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{6}$/),
+});
+
+export const VerifyEmailResponseSchema = z.object({
+  verified: z.boolean(),
+});
+
 // --- Projects (openapi components/schemas: ProjectSummary, ProjectsResponse, ProjectCreate/Update/Delete/Restore/Trash/Purge) ---
 export const ProjectSummarySchema = z.object({
   id: z.string().uuid(),

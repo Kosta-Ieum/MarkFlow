@@ -186,6 +186,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /auth/email/send-code:
+    post:
+      tags:
+      - Auth
+      summary: 회원가입 이메일 인증코드 발송
+      description: 회원가입 전 단계. 입력한 이메일로 6자리 인증코드를 생성·발송한다.
+      operationId: sendEmailCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendCodeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendCodeResponse'
+        '400':
+          description: ValidationError
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/email/verify:
+    post:
+      tags:
+      - Auth
+      summary: 회원가입 이메일 인증코드 검증
+      description: 회원가입 전 단계. 이메일과 6자리 코드를 검증한다. 불일치 시 400.
+      operationId: verifyEmailCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmailResponse'
+        '400':
+          description: ValidationError
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /projects:
     get:
       tags:
@@ -1494,6 +1560,45 @@ components:
         accessToken:
           type: string
           example: eyJhbGci...
+    SendCodeRequest:
+      type: object
+      required:
+      - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@markflow.app
+    SendCodeResponse:
+      type: object
+      required:
+      - sent
+      properties:
+        sent:
+          type: boolean
+          example: true
+    VerifyEmailRequest:
+      type: object
+      required:
+      - email
+      - code
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@markflow.app
+        code:
+          type: string
+          pattern: '^\d{6}$'
+          example: '123456'
+    VerifyEmailResponse:
+      type: object
+      required:
+      - verified
+      properties:
+        verified:
+          type: boolean
+          example: true
     ProjectSummary:
       type: object
       required:

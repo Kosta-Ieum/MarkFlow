@@ -103,7 +103,26 @@
 
 응답 `200` `{ "id": "uuid", "email": "...", "name": "..." }`
 
-### 1.4 (선택) 토큰 갱신 / 로그아웃
+### 1.4 회원가입 이메일 인증코드 발송
+`POST /auth/email/send-code` — 회원가입 전 단계(공개). 입력 이메일로 6자리 인증코드를 생성·발송.
+
+요청 `{ "email": "user@markflow.app" }`
+
+응답 `200` `{ "sent": true }`
+- 에러: `400 VALIDATION_ERROR`(이메일 형식), `500 INTERNAL`.
+- 요청/응답 DTO(`SendCodeRequest`, `SendCodeResponse`)는 `@markflow/shared`에 zod 스키마로 제공된다.
+
+### 1.5 회원가입 이메일 인증코드 검증
+`POST /auth/email/verify` — 회원가입 전 단계(공개). 이메일과 6자리 코드 검증.
+
+요청 `{ "email": "user@markflow.app", "code": "123456" }`
+- 검증: 이메일 형식, `code`는 정규식 `^\d{6}$`.
+
+응답 `200` `{ "verified": true }`
+- 에러: `400`(코드 불일치/형식 오류), `500 INTERNAL`.
+- 요청/응답 DTO(`VerifyEmailRequest`, `VerifyEmailResponse`)는 `@markflow/shared`에 zod 스키마로 제공된다. 검증 성공 시 클라이언트는 이어서 `POST /auth/signup`을 호출한다.
+
+### 1.6 (선택) 토큰 갱신 / 로그아웃
 - `POST /auth/refresh` → 새 `accessToken`.
 - `POST /auth/logout` → refreshToken 폐기(미사용 시 클라이언트 토큰 폐기로 대체).
 
@@ -482,6 +501,8 @@ const socket = io(WS_URL, { auth: { token: accessToken } });
 | 메서드 | 경로 | 권한 | 설명 |
 | --- | --- | --- | --- |
 | POST | `/auth/signup` | 공개 | 회원가입 |
+| POST | `/auth/email/send-code` | 공개 | 회원가입 이메일 인증코드 발송 |
+| POST | `/auth/email/verify` | 공개 | 회원가입 이메일 인증코드 검증 |
 | POST | `/auth/login` | 공개 | 로그인 |
 | GET | `/auth/me` | 인증 | 내 정보 |
 | GET | `/projects` | 인증 | 내 프로젝트 목록 |
