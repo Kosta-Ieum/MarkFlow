@@ -1,6 +1,6 @@
 // React Flow 캔버스 화면 — IEUM-21 [F1-1.1] 스캐폴드 + IEUM-22 [F1-1.2] 노드 카드
-// + IEUM-23 [F1-1.3] Zustand 캔버스 스토어(로컬 CRUD).
-// 영속화(REST)는 IEUM-27, 실시간 동기화(소켓)는 IEUM-34에서 이 화면에 연결된다.
+// + IEUM-23 [F1-1.3] Zustand 캔버스 스토어 + IEUM-27 [F1-2.1] 캔버스↔DB 연동·자동저장.
+// 실시간 동기화(소켓)는 IEUM-34에서 이 화면에 연결된다.
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from "@xyflow/react";
@@ -33,9 +33,14 @@ function CanvasSurface({
   const onNodesChange = useCanvasStore((s) => s.onNodesChange);
   const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
   const onConnect = useCanvasStore((s) => s.onConnect);
+  const isSaving = useCanvasStore((s) => s.isSaving);
+  const saveError = useCanvasStore((s) => s.saveError);
 
   return (
     <div className="relative h-full flex-1">
+      <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
+        {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
+      </div>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -67,13 +72,16 @@ export function CanvasPage() {
   const nodes = useCanvasStore((s) => s.nodes);
   const applyLocalAddNode = useCanvasStore((s) => s.applyLocalAddNode);
 
-  // TODO(IEUM-27): REST로 캔버스 스냅샷 로드. 지금은 스토어가 비어있으면
-  // 화면설계서 §4.4.2 시드 흐름으로 초기화해 시각 확인을 가능하게 한다.
   useEffect(() => {
-    if (useCanvasStore.getState().nodes.length === 0) {
-      useCanvasStore.setState({ nodes: seedNodes, edges: seedEdges });
-    }
-  }, []);
+    if (!projectId) return;
+    useCanvasStore.getState().loadCanvas(projectId).catch(() => {
+      // BE 캔버스 REST(IEUM-24/25)가 아직 구현 전이면 로드가 실패한다 —
+      // 화면설계서 §4.4.2 시드 흐름으로 폴백해 시각 확인을 가능하게 한다.
+      if (useCanvasStore.getState().nodes.length === 0) {
+        useCanvasStore.setState({ nodes: seedNodes, edges: seedEdges, isLoading: false });
+      }
+    });
+  }, [projectId]);
 
   const handleAddNode = () => {
     applyLocalAddNode({ x: 0, y: 0 });

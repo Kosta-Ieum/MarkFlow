@@ -5,7 +5,11 @@
 import { create } from "zustand";
 import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import type { Edge, EdgeChange, Node, NodeChange, OnConnect, XYPosition } from "@xyflow/react";
-import type { NodeType } from "@markflow/shared";
+import type { NodeDTO, NodeType } from "@markflow/shared";
+
+import { fetchCanvas, saveCanvasSnapshot } from "../lib/canvasApi";
+
+const AUTOSAVE_DEBOUNCE_MS = 2000; // .claude/rules/frontend.md: 저장 debounce ≈2s
 
 export interface MarkdownNodeData extends Record<string, unknown> {
   title: string;
@@ -21,6 +25,17 @@ interface CanvasState {
   edges: Edge[];
   /** 소프트 삭제된 노드 — 휴지통(IEUM-28)에서 사용. 복구 시 엣지는 미복원(§CV-16). */
   trashedNodes: CanvasNode[];
+
+  projectId: string | null;
+  isLoading: boolean;
+  isSaving: boolean;
+  saveError: string | null;
+  saveTimer: ReturnType<typeof setTimeout> | null;
+
+  // GET/PUT /projects/:id/canvas (openapi 정본) — IEUM-27
+  loadCanvas: (projectId: string) => Promise<void>;
+  saveCanvas: () => Promise<void>;
+  scheduleSave: () => void;
 
   // React Flow 이벤트 바인딩 — 로컬 선택/드래그만 처리. 삭제(remove)는 무시하고
   // applyLocalDeleteNode를 통해서만 소프트 삭제한다(하드 삭제 경로 차단).
@@ -45,18 +60,82 @@ interface CanvasState {
 
 const newId = () => crypto.randomUUID();
 
+function toNodeDTO(node: CanvasNode): NodeDTO {
+  return {
+    id: node.id,
+    type: node.data.type,
+    title: node.data.title,
+    markdown: node.data.markdown,
+    collapsed: node.data.collapsed,
+    position: node.position,
+  };
+}
+
+function fromNodeDTO(dto: NodeDTO): CanvasNode {
+  return {
+    id: dto.id,
+    type: "markdown",
+    position: dto.position,
+    data: { title: dto.title, markdown: dto.markdown, type: dto.type, collapsed: dto.collapsed },
+  };
+}
+
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   nodes: [],
   edges: [],
   trashedNodes: [],
+  projectId: null,
+  isLoading: false,
+  isSaving: false,
+  saveError: null,
+  saveTimer: null,
+
+  loadCanvas: async (projectId) => {
+    set({ isLoading: true, saveError: null, projectId });
+    try {
+      const snapshot = await fetchCanvas(projectId);
+      set({
+        nodes: snapshot.nodes.map(fromNodeDTO),
+        edges: snapshot.edges,
+        isLoading: false,
+      });
+    } catch (err) {
+      set({ isLoading: false });
+      throw err;
+    }
+  },
+
+  saveCanvas: async () => {
+    const { projectId, nodes, edges } = get();
+    if (!projectId) return;
+    set({ isSaving: true, saveError: null });
+    try {
+      await saveCanvasSnapshot(projectId, { nodes: nodes.map(toNodeDTO), edges });
+      set({ isSaving: false });
+    } catch (err) {
+      set({ isSaving: false, saveError: err instanceof Error ? err.message : "저장 실패" });
+    }
+  },
+
+  scheduleSave: () => {
+    const { saveTimer, projectId } = get();
+    if (!projectId) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    const timer = setTimeout(() => {
+      void get().saveCanvas();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    set({ saveTimer: timer });
+  },
 
   onNodesChange: (changes) => {
     const nonRemove = changes.filter((c) => c.type !== "remove");
     set((state) => ({ nodes: applyNodeChanges(nonRemove, state.nodes) as CanvasNode[] }));
+    get().scheduleSave();
   },
 
   onEdgesChange: (changes) => {
     set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
+    get().scheduleSave();
   },
 
   onConnect: (connection) => {
@@ -73,6 +152,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       data: { title: "새 노드", markdown: "", type, collapsed: true },
     };
     set((state) => ({ nodes: [...state.nodes, node] }));
+    get().scheduleSave();
     return id;
   },
 
@@ -80,6 +160,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({
       nodes: state.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
     }));
+    get().scheduleSave();
   },
 
   applyLocalToggleCollapse: (id) => {
@@ -88,6 +169,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         n.id === id ? { ...n, data: { ...n.data, collapsed: !n.data.collapsed } } : n,
       ),
     }));
+    get().scheduleSave();
   },
 
   // 소프트 삭제 + 연결된 엣지 물리 삭제 (§CV-08 — 복구 시 엣지는 미복원 §CV-16)
@@ -101,6 +183,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         trashedNodes: [...state.trashedNodes, target],
       };
     });
+    get().scheduleSave();
   },
 
   applyLocalRestoreNode: (id) => {
@@ -112,15 +195,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         nodes: [...state.nodes, target],
       };
     });
+    get().scheduleSave();
   },
 
   applyLocalAddEdge: (source, target) => {
     const edge: Edge = { id: newId(), source, target };
     set((state) => ({ edges: [...state.edges, edge] }));
+    get().scheduleSave();
   },
 
   applyLocalDeleteEdge: (id) => {
     set((state) => ({ edges: state.edges.filter((e) => e.id !== id) }));
+    get().scheduleSave();
   },
 
   // --- 원격 수신 적용 (재emit 금지) ---
