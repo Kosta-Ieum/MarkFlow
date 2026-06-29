@@ -5,6 +5,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components";
 import { AuthPage } from "../features/auth";
 import { LandingPage } from "../features/landing";
+import { NodeEditorPage } from "../features/node-editor";
 import { ProjectsPage } from "../features/projects";
 import { useAuthStore } from "../store/authStore";
 
@@ -49,6 +50,14 @@ export function AppRoutes() {
           element={
             <ProtectedRoute>
               <CanvasPlaceholder />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/p/:projectId/n/:nodeId"
+          element={
+            <ProtectedRoute>
+              <NodeEditorPage />
             </ProtectedRoute>
           }
         />
