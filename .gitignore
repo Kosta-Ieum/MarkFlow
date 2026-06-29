@@ -38,6 +38,9 @@ apps/api/prisma/generated/
 *.db
 *.db-journal
 
+# ───────── 개인 학습 노트 ─────────
+apps/api/practice/
+
 # ───────── Claude Code / 로컬 툴 상태 ─────────
 .claude/settings.local.json
 # oh-my-claudecode 로컬 상태 (세션·노트패드·플랜 등)
