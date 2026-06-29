@@ -31,3 +31,6 @@ jobs:
 
       - name: Build (shared dist/export·계약 산출물 검증)
         run: pnpm -r build
+
+      - name: Test (유닛 — 현재 packages/shared 계약 zod)
+        run: pnpm -r test

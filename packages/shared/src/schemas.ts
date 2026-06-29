@@ -81,3 +81,112 @@ export const ErrorResponseSchema = z.object({
     details: z.unknown().nullable(),
   }),
 });
+
+// --- Auth (openapi components/schemas: User, SignupRequest, LoginRequest, AuthResponse, RefreshResponse) ---
+// 주의: 기존 UserRefSchema(id,name 2필드)와 별개 — 이쪽은 email 포함 3필드
+export const UserSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  name: z.string(),
+});
+
+export const SignupRequestSchema = z.object({
+  name: z.string(),
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+export const LoginRequestSchema = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
+
+export const AuthResponseSchema = z.object({
+  accessToken: z.string(),
+  user: UserSchema,
+});
+
+export const RefreshResponseSchema = z.object({
+  accessToken: z.string(),
+});
+
+// --- Projects (openapi components/schemas: ProjectSummary, ProjectsResponse, ProjectCreate/Update/Delete/Restore/Trash/Purge) ---
+export const ProjectSummarySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  role: RoleSchema,
+  isOwner: z.boolean(),
+  nodeCount: z.number().int().min(0),
+  updatedAt: z.string().datetime(),
+});
+
+export const ProjectsResponseSchema = z.object({
+  projects: z.array(ProjectSummarySchema),
+});
+
+export const ProjectCreateRequestSchema = z.object({
+  name: z.string().max(120),
+});
+
+export const ProjectUpdateRequestSchema = z.object({
+  name: z.string().max(120),
+});
+
+export const ProjectUpdateResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  updatedAt: z.string().datetime(),
+});
+
+export const ProjectDeleteResponseSchema = z.object({
+  id: z.string().uuid(),
+  deletedAt: z.string().datetime(),
+});
+
+export const ProjectRestoreResponseSchema = z.object({
+  id: z.string().uuid(),
+  deletedAt: z.string().datetime().nullable(),
+});
+
+export const DeletedProjectSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  deletedAt: z.string().datetime(),
+  isOwner: z.boolean(),
+});
+
+export const ProjectsTrashResponseSchema = z.object({
+  projects: z.array(DeletedProjectSchema),
+});
+
+export const PurgeResponseSchema = z.object({
+  id: z.string().uuid(),
+  purged: z.boolean(),
+});
+
+// --- Members (openapi components/schemas: Member, MembersResponse, MemberInvite/Update Request, MemberDeleteResponse) ---
+// REST 계약 정본은 apps/api/openapi.yaml (/projects/{projectId}/members 외). 형태는 openapi와 1:1.
+export const MemberSchema = z.object({
+  userId: z.string().uuid(),
+  name: z.string(),
+  email: z.string().email(),
+  role: RoleSchema,
+});
+
+export const MembersResponseSchema = z.object({
+  members: z.array(MemberSchema),
+});
+
+// 초대·역할변경의 role enum은 OWNER 제외(openapi enum: EDITOR|VIEWER).
+export const MemberInviteRequestSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(["EDITOR", "VIEWER"]),
+});
+
+export const MemberUpdateRequestSchema = z.object({
+  role: z.enum(["EDITOR", "VIEWER"]),
+});
+
+export const MemberDeleteResponseSchema = z.object({
+  userId: z.string().uuid(),
+});

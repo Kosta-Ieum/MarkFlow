@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# TODO(스택 확정 후): 테스트 러너 연결 — 예) pnpm -r test (vitest 등)
-echo "▸ Tests…"
-echo "  (테스트 러너 미설정 — 스택 확정 후 vitest 등 연결)"
+# 워크스페이스 유닛 테스트 — test 스크립트가 있는 패키지만 실행(vitest).
+# 현재: packages/shared(계약 zod). 다른 패키지가 test 스크립트를 추가하면 자동 포함.
+echo "▸ Tests (pnpm -r test)…"
+pnpm -r test
