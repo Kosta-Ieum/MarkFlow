@@ -3,6 +3,8 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ProjectSummary, Role } from "@markflow/shared";
 import { ApiError } from "../../lib/api";
+import { canManage } from "../../lib/permissions";
+import { MembersModal } from "../members/MembersModal";
 import { useCreateProject, useDeleteProject, useProjects, useRenameProject } from "./useProjects";
 
 // ── 유틸: 날짜 상대 포맷 ────────────────────────────────────────────────────
@@ -51,9 +53,10 @@ function RoleBadge({ role }: RoleBadgeProps) {
 
 interface ProjectCardProps {
   project: ProjectSummary;
+  onManageMembers: (project: ProjectSummary) => void;
 }
 
-function ProjectCard({ project }: ProjectCardProps) {
+function ProjectCard({ project, onManageMembers }: ProjectCardProps) {
   const navigate = useNavigate();
   const rename = useRenameProject();
   const del = useDeleteProject();
@@ -90,6 +93,11 @@ function ProjectCard({ project }: ProjectCardProps) {
     } else if (e.key === "Escape") {
       setRenaming(false);
     }
+  };
+
+  const handleManageMembersClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onManageMembers(project);
   };
 
   const handleDeleteClick = (e: React.MouseEvent) => {
@@ -153,6 +161,18 @@ function ProjectCard({ project }: ProjectCardProps) {
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
+            {!renaming && canManage(project.role) && (
+              <button
+                type="button"
+                onClick={handleManageMembersClick}
+                className="rounded p-1 text-muted hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
+                aria-label="멤버 관리"
+                title="공유 / 멤버 관리"
+              >
+                <ShareIcon />
+              </button>
+            )}
+
             {!renaming && (
               <button
                 type="button"
@@ -230,6 +250,27 @@ function PencilIcon() {
   );
 }
 
+function ShareIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="3.5" r="1.8" />
+      <circle cx="4" cy="8" r="1.8" />
+      <circle cx="12" cy="12.5" r="1.8" />
+      <path d="M10.4 4.4L5.6 7.1M5.6 8.9l4.8 2.7" />
+    </svg>
+  );
+}
+
 function TrashIcon() {
   return (
     <svg
@@ -285,6 +326,7 @@ export function ProjectsPage() {
   const create = useCreateProject();
 
   const [newName, setNewName] = useState("");
+  const [membersTarget, setMembersTarget] = useState<ProjectSummary | null>(null);
 
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -380,7 +422,7 @@ export function ProjectsPage() {
           /* 프로젝트 그리드 */
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
             {projects.map((p) => (
-              <ProjectCard key={p.id} project={p} />
+              <ProjectCard key={p.id} project={p} onManageMembers={setMembersTarget} />
             ))}
           </div>
         ) : (
@@ -390,6 +432,15 @@ export function ProjectsPage() {
           </div>
         )}
       </div>
+
+      {/* 멤버 관리 모달 (OWNER) */}
+      {membersTarget && (
+        <MembersModal
+          projectId={membersTarget.id}
+          projectName={membersTarget.name}
+          onClose={() => setMembersTarget(null)}
+        />
+      )}
     </section>
   );
 }

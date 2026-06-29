@@ -181,3 +181,30 @@ export const PurgeResponseSchema = z.object({
   id: z.string().uuid(),
   purged: z.boolean(),
 });
+
+// --- Members (openapi components/schemas: Member, MembersResponse, MemberInvite/Update Request, MemberDeleteResponse) ---
+// REST 계약 정본은 apps/api/openapi.yaml (/projects/{projectId}/members 외). 형태는 openapi와 1:1.
+export const MemberSchema = z.object({
+  userId: z.string().uuid(),
+  name: z.string(),
+  email: z.string().email(),
+  role: RoleSchema,
+});
+
+export const MembersResponseSchema = z.object({
+  members: z.array(MemberSchema),
+});
+
+// 초대·역할변경의 role enum은 OWNER 제외(openapi enum: EDITOR|VIEWER).
+export const MemberInviteRequestSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(["EDITOR", "VIEWER"]),
+});
+
+export const MemberUpdateRequestSchema = z.object({
+  role: z.enum(["EDITOR", "VIEWER"]),
+});
+
+export const MemberDeleteResponseSchema = z.object({
+  userId: z.string().uuid(),
+});

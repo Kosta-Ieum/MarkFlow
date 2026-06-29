@@ -32,6 +32,11 @@ import {
   DeletedProjectSchema,
   ProjectsTrashResponseSchema,
   PurgeResponseSchema,
+  MemberSchema,
+  MembersResponseSchema,
+  MemberInviteRequestSchema,
+  MemberUpdateRequestSchema,
+  MemberDeleteResponseSchema,
 } from "./schemas.js";
 
 export type Role = z.infer<typeof RoleSchema>;
@@ -69,3 +74,10 @@ export type ProjectRestoreResponse = z.infer<typeof ProjectRestoreResponseSchema
 export type DeletedProject = z.infer<typeof DeletedProjectSchema>;
 export type ProjectsTrashResponse = z.infer<typeof ProjectsTrashResponseSchema>;
 export type PurgeResponse = z.infer<typeof PurgeResponseSchema>;
+
+// Member types
+export type Member = z.infer<typeof MemberSchema>;
+export type MembersResponse = z.infer<typeof MembersResponseSchema>;
+export type MemberInviteRequest = z.infer<typeof MemberInviteRequestSchema>;
+export type MemberUpdateRequest = z.infer<typeof MemberUpdateRequestSchema>;
+export type MemberDeleteResponse = z.infer<typeof MemberDeleteResponseSchema>;

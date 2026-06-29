@@ -389,6 +389,8 @@
 
 ## 6. 멤버 / 권한 (Members) — OWNER only
 
+> 공용 DTO·zod: `@markflow/shared` — `MemberSchema`/`Member`, `MembersResponseSchema`/`MembersResponse`, `MemberInviteRequestSchema`/`MemberInviteRequest`, `MemberUpdateRequestSchema`/`MemberUpdateRequest`, `MemberDeleteResponseSchema`/`MemberDeleteResponse`. 형태는 `apps/api/openapi.yaml`과 1:1(초대·역할변경 role enum = `EDITOR|VIEWER`).
+
 ### 6.1 멤버 목록
 `GET /projects/:projectId/members`
 
