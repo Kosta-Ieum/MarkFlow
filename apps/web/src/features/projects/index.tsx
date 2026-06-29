@@ -265,7 +265,6 @@ function TrashLinkIcon() {
     </svg>
   );
 }
-
 // ── 스켈레톤 ─────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -318,6 +317,7 @@ export function ProjectsPage() {
             휴지통
           </Link>
         </div>
+
 
         {/* 새 프로젝트 인라인 생성 폼 */}
         <form
