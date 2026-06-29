@@ -1,2 +1,9 @@
-// PrismaModule (@Global) — PrismaService 제공
-// TODO: 구현
+import { Global, Module } from "@nestjs/common";
+import { PrismaService } from "./prisma.service.js";
+
+@Global()
+@Module({
+  providers: [PrismaService],
+  exports: [PrismaService],
+})
+export class PrismaModule {}
