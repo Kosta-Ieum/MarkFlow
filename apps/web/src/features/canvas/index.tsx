@@ -1,15 +1,15 @@
 // React Flow 캔버스 화면 — IEUM-21 [F1-1.1] 스캐폴드 + IEUM-22 [F1-1.2] 노드 카드
-// 노드/엣지는 아직 시드 데이터(seedNodes.ts)다 — 실제 CRUD·영속화는 Zustand 캔버스
-// 스토어(IEUM-23)에서 이 화면에 연결되고, 실시간 동기화는 IEUM-34에서 연결된다.
-import { useCallback, useMemo, useState } from "react";
+// + IEUM-23 [F1-1.3] Zustand 캔버스 스토어(로컬 CRUD).
+// 영속화(REST)는 IEUM-27, 실시간 동기화(소켓)는 IEUM-34에서 이 화면에 연결된다.
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from "@xyflow/react";
-import type { Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { useCanvasStore } from "../../store/canvasStore";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
-import { MarkdownNodeCard, type MarkdownNodeData } from "./MarkdownNodeCard";
+import { MarkdownNodeCard } from "./MarkdownNodeCard";
 import { RightPanel } from "./RightPanel";
 import { seedEdges, seedNodes } from "./seedNodes";
 import { ZoomControls } from "./ZoomControls";
@@ -22,21 +22,26 @@ const defaultEdgeOptions = {
 };
 
 function CanvasSurface({
-  nodes,
-  edges,
   rightPanelExpanded,
   rightPanelOffset,
 }: {
-  nodes: Node<MarkdownNodeData>[];
-  edges: Edge[];
   rightPanelExpanded: boolean;
   rightPanelOffset: number;
 }) {
+  const nodes = useCanvasStore((s) => s.nodes);
+  const edges = useCanvasStore((s) => s.edges);
+  const onNodesChange = useCanvasStore((s) => s.onNodesChange);
+  const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
+  const onConnect = useCanvasStore((s) => s.onConnect);
+
   return (
     <div className="relative h-full flex-1">
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
         nodeTypes={nodeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
         defaultViewport={DEFAULT_VIEWPORT}
@@ -59,13 +64,20 @@ export function CanvasPage() {
   const [leftExpanded, setLeftExpanded] = useState(true);
   const [rightExpanded, setRightExpanded] = useState(false);
 
-  // TODO(IEUM-23): Zustand 캔버스 스토어로 교체. 지금은 시드 데이터만 보여준다.
-  const nodes = useMemo(() => seedNodes, []);
-  const edges = useMemo(() => seedEdges, []);
+  const nodes = useCanvasStore((s) => s.nodes);
+  const applyLocalAddNode = useCanvasStore((s) => s.applyLocalAddNode);
 
-  const handleAddNode = useCallback(() => {
-    // 노드 생성은 Zustand 캔버스 스토어(IEUM-23)에서 구현.
+  // TODO(IEUM-27): REST로 캔버스 스냅샷 로드. 지금은 스토어가 비어있으면
+  // 화면설계서 §4.4.2 시드 흐름으로 초기화해 시각 확인을 가능하게 한다.
+  useEffect(() => {
+    if (useCanvasStore.getState().nodes.length === 0) {
+      useCanvasStore.setState({ nodes: seedNodes, edges: seedEdges });
+    }
   }, []);
+
+  const handleAddNode = () => {
+    applyLocalAddNode({ x: 0, y: 0 });
+  };
 
   return (
     <ReactFlowProvider>
@@ -77,12 +89,7 @@ export function CanvasPage() {
           onAddNode={handleAddNode}
           nodeCount={nodes.length}
         />
-        <CanvasSurface
-          nodes={nodes}
-          edges={edges}
-          rightPanelExpanded={rightExpanded}
-          rightPanelOffset={372}
-        />
+        <CanvasSurface rightPanelExpanded={rightExpanded} rightPanelOffset={372} />
         <RightPanel expanded={rightExpanded} onToggle={() => setRightExpanded((v) => !v)} />
       </div>
     </ReactFlowProvider>
