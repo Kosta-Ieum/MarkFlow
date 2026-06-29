@@ -54,6 +54,14 @@ export function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/p/:projectId/n/:nodeId"
+          element={
+            <ProtectedRoute>
+              <NodeEditorPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
