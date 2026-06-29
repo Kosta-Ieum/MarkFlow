@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "../components";
 import { AuthPage } from "../features/auth";
+import { CanvasPage } from "../features/canvas";
 import { LandingPage } from "../features/landing";
 import { NodeEditorPage } from "../features/node-editor";
 import { ProjectsPage } from "../features/projects";
@@ -20,15 +21,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />;
   }
   return children;
-}
-
-// 캔버스 라우트는 F1(features/canvas) 소유 — 여기서는 인라인 플레이스홀더만 둔다.
-function CanvasPlaceholder() {
-  return (
-    <div className="grid min-h-screen place-items-center bg-canvas px-6 text-center">
-      <p className="font-display text-lg text-secondary">캔버스(F1 구현 예정)</p>
-    </div>
-  );
 }
 
 export function AppRoutes() {
@@ -58,7 +50,7 @@ export function AppRoutes() {
           path="/p/:projectId"
           element={
             <ProtectedRoute>
-              <CanvasPlaceholder />
+              <CanvasPage />
             </ProtectedRoute>
           }
         />
