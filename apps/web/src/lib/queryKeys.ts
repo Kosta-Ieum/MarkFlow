@@ -5,4 +5,5 @@ export const queryKeys = {
   canvas: (projectId: string) => ["project", projectId, "canvas"] as const,
   messages: (projectId: string) => ["project", projectId, "messages"] as const,
   projectsTrash: ["projects", "trash"] as const,
+
 } as const;
