@@ -8,13 +8,12 @@ export function GlobalHeader() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
-  const clearAuth = useAuthStore((s) => s.clearAuth);
+  const logout = useAuthStore((s) => s.logout);
 
   const goHome = () => navigate(isAuthenticated ? "/projects" : "/");
 
   const handleLogout = () => {
-    clearAuth();
-    navigate("/");
+    void logout().then(() => navigate("/"));
   };
 
   const initial = user?.name?.trim().charAt(0).toUpperCase() ?? "";

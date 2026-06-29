@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+**/*.log
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+apps/web
+Docs
+scripts
+.claude
+.githooks
+README.md
+*.md

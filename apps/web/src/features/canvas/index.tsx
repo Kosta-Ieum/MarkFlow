@@ -1,3 +1,4 @@
+
 // React Flow 캔버스 화면 — IEUM-21 [F1-1.1] 스캐폴드 + IEUM-22 [F1-1.2] 노드 카드
 // 노드/엣지는 아직 시드 데이터(seedNodes.ts)다 — 실제 CRUD·영속화는 Zustand 캔버스
 // 스토어(IEUM-23)에서 이 화면에 연결되고, 실시간 동기화는 IEUM-34에서 연결된다.
@@ -6,7 +7,6 @@ import { useParams } from "react-router-dom";
 import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
 import { MarkdownNodeCard, type MarkdownNodeData } from "./MarkdownNodeCard";
@@ -29,6 +29,7 @@ function CanvasSurface({
 }: {
   nodes: Node<MarkdownNodeData>[];
   edges: Edge[];
+
   rightPanelExpanded: boolean;
   rightPanelOffset: number;
 }) {

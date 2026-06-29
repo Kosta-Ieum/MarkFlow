@@ -18,6 +18,10 @@ import {
   LoginRequestSchema,
   AuthResponseSchema,
   RefreshResponseSchema,
+  SendCodeRequestSchema,
+  SendCodeResponseSchema,
+  VerifyEmailRequestSchema,
+  VerifyEmailResponseSchema,
   ProjectSummarySchema,
   ProjectsResponseSchema,
   ProjectCreateRequestSchema,
@@ -54,6 +58,10 @@ export type SignupRequest = z.infer<typeof SignupRequestSchema>;
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 export type RefreshResponse = z.infer<typeof RefreshResponseSchema>;
+export type SendCodeRequest = z.infer<typeof SendCodeRequestSchema>;
+export type SendCodeResponse = z.infer<typeof SendCodeResponseSchema>;
+export type VerifyEmailRequest = z.infer<typeof VerifyEmailRequestSchema>;
+export type VerifyEmailResponse = z.infer<typeof VerifyEmailResponseSchema>;
 
 // Project types
 export type ProjectSummary = z.infer<typeof ProjectSummarySchema>;

@@ -1,6 +1,20 @@
 import { Module } from "@nestjs/common";
+import { JwtModule } from "@nestjs/jwt";
+import { env } from "./config/env.js";
+import { PrismaModule } from "./prisma/prisma.module.js";
+import { AuthModule } from "./modules/auth/auth.module.js";
 
-// 루트 모듈 — 도메인 모듈(auth·projects·nodes·edges·members·chat·activity)·PrismaModule·realtime gateway는
-// 구현 시 imports에 등록. (Socket.io는 @nestjs/platform-socket.io 기본 IoAdapter)
-@Module({})
+@Module({
+  imports: [
+    PrismaModule,
+    JwtModule.register({
+      global: true,
+      secret: env.JWT_SECRET,
+      signOptions: { expiresIn: "7d" },
+    }),
+    AuthModule,
+    // 도메인 모듈(projects·nodes·edges·members·chat·activity·realtime)은
+    // 구현 시 여기에 등록한다.
+  ],
+})
 export class AppModule {}

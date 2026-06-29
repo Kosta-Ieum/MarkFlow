@@ -1,0 +1,553 @@
+// MSW dev 목 — stateful in-memory store + 시드 데이터.
+// VITE_MOCK_API=1 일 때만 main.tsx에서 동적 import로 기동(프로덕션/실BE 무영향).
+// 타입은 @markflow/shared 정본에서만 import — 로컬 재정의 금지.
+import type {
+  User,
+  ProjectSummary,
+  DeletedProject,
+  NodeDTO,
+  EdgeDTO,
+  ChatMessageDTO,
+  ActivityDTO,
+  Role,
+  Member,
+} from "@markflow/shared";
+
+// ── 유틸 ─────────────────────────────────────────────────────────────────────
+
+let idSeq = 0;
+/** 시드/런타임 공용 결정적 UUID 생성기(데모용 — 형식만 uuid면 충분). */
+export function uuid(): string {
+  idSeq += 1;
+  const hex = idSeq.toString(16).padStart(12, "0");
+  return `00000000-0000-4000-8000-${hex}`;
+}
+
+function isoNow(): string {
+  return new Date().toISOString();
+}
+
+function isoMinutesAgo(minutes: number): string {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
+}
+
+/** 데모용 가짜 JWT(검증 안 함 — 핸들러는 Bearer 없이도 동작). */
+export function issueToken(userId: string): string {
+  return `mock.${userId}.${Date.now().toString(36)}`;
+}
+
+// ── 시드 식별자 ──────────────────────────────────────────────────────────────
+
+const DEMO_USER_ID = uuid();
+const PROJECT_ROADMAP_ID = uuid();
+const PROJECT_BLOG_ID = uuid();
+const PROJECT_RESEARCH_ID = uuid();
+const TRASH_PROJECT_ID = uuid();
+
+// ── store 타입 ───────────────────────────────────────────────────────────────
+
+interface ProjectRecord {
+  id: string;
+  name: string;
+  role: Role;
+  isOwner: boolean;
+  updatedAt: string;
+  deletedAt: string | null;
+  nodes: NodeDTO[];
+  edges: EdgeDTO[];
+  messages: ChatMessageDTO[];
+  history: ActivityDTO[];
+}
+
+interface MockDb {
+  user: User;
+  projects: ProjectRecord[];
+  /** email → 6자리 OTP 코드 (mock 전용). 실서버는 별도 저장소 사용. */
+  verificationCodes: Record<string, string>;
+  /** projectId → Member[] (프로젝트별 멤버 목록). */
+  members: Record<string, Member[]>;
+}
+
+// ── 시드 데이터 ──────────────────────────────────────────────────────────────
+
+const demoUser: User = {
+  id: DEMO_USER_ID,
+  email: "demo@markflow.app",
+  name: "데모 사용자",
+};
+
+// 시드 시점 작성자(고정). 런타임 변이는 currentUserRef()로 현재 user를 반영.
+const userRef = { id: demoUser.id, name: demoUser.name };
+
+function currentUserRef(): { id: string; name: string } {
+  return { id: db.user.id, name: db.user.name };
+}
+
+function seedNodes(): NodeDTO[] {
+  return [
+    {
+      id: uuid(),
+      type: "idea",
+      title: "킥오프 아이디어",
+      markdown: "# 킥오프\n- 목표 정리\n- 범위 합의",
+      collapsed: false,
+      position: { x: 80, y: 80 },
+      updatedAt: isoMinutesAgo(120),
+    },
+    {
+      id: uuid(),
+      type: "doc",
+      title: "제품 개요 문서",
+      markdown: "## 개요\n마크다운 노드 기반 협업 캔버스.",
+      collapsed: false,
+      position: { x: 360, y: 80 },
+      updatedAt: isoMinutesAgo(90),
+    },
+    {
+      id: uuid(),
+      type: "task",
+      title: "스프린트 1 백로그",
+      markdown: "- [ ] 캔버스 렌더\n- [ ] 실시간 커서",
+      collapsed: true,
+      position: { x: 360, y: 300 },
+      updatedAt: isoMinutesAgo(60),
+    },
+    {
+      id: uuid(),
+      type: "decision",
+      title: "기술 스택 결정",
+      markdown: "React Flow + Socket.io 채택.",
+      collapsed: false,
+      position: { x: 80, y: 300 },
+      updatedAt: isoMinutesAgo(45),
+    },
+    {
+      id: uuid(),
+      type: "data",
+      title: "사용자 지표",
+      markdown: "| 주차 | DAU |\n| --- | --- |\n| 1 | 12 |",
+      collapsed: false,
+      position: { x: 640, y: 200 },
+      updatedAt: isoMinutesAgo(20),
+    },
+  ];
+}
+
+function seedEdges(nodes: NodeDTO[]): EdgeDTO[] {
+  return [
+    { id: uuid(), source: nodes[0].id, target: nodes[1].id },
+    { id: uuid(), source: nodes[1].id, target: nodes[2].id },
+    { id: uuid(), source: nodes[0].id, target: nodes[3].id },
+  ];
+}
+
+function seedMessages(): ChatMessageDTO[] {
+  return [
+    {
+      id: uuid(),
+      content: "안녕하세요! 캔버스 작업 시작합니다.",
+      createdAt: isoMinutesAgo(115),
+      user: userRef,
+    },
+    {
+      id: uuid(),
+      content: "노드 몇 개 추가해뒀어요.",
+      createdAt: isoMinutesAgo(58),
+      user: userRef,
+    },
+    {
+      id: uuid(),
+      content: "결정 노드 검토 부탁드립니다.",
+      createdAt: isoMinutesAgo(18),
+      user: userRef,
+    },
+  ];
+}
+
+function seedHistory(nodes: NodeDTO[]): ActivityDTO[] {
+  return [
+    {
+      id: uuid(),
+      targetType: "NODE",
+      targetId: nodes[0].id,
+      targetLabel: nodes[0].title,
+      action: "CREATE",
+      createdAt: isoMinutesAgo(120),
+      user: userRef,
+    },
+    {
+      id: uuid(),
+      targetType: "NODE",
+      targetId: nodes[1].id,
+      targetLabel: nodes[1].title,
+      action: "UPDATE",
+      createdAt: isoMinutesAgo(88),
+      user: userRef,
+    },
+    {
+      id: uuid(),
+      targetType: "EDGE",
+      targetId: null,
+      targetLabel: "연결",
+      action: "CONNECT",
+      createdAt: isoMinutesAgo(70),
+      user: userRef,
+    },
+    {
+      id: uuid(),
+      targetType: "NODE",
+      targetId: nodes[2].id,
+      targetLabel: nodes[2].title,
+      action: "MOVE",
+      createdAt: isoMinutesAgo(40),
+      user: userRef,
+    },
+  ];
+}
+
+function buildProject(
+  id: string,
+  name: string,
+  role: Role,
+  updatedMinutesAgo: number,
+): ProjectRecord {
+  const nodes = seedNodes();
+  return {
+    id,
+    name,
+    role,
+    isOwner: role === "OWNER",
+    updatedAt: isoMinutesAgo(updatedMinutesAgo),
+    deletedAt: null,
+    nodes,
+    edges: seedEdges(nodes),
+    messages: seedMessages(),
+    history: seedHistory(nodes),
+  };
+}
+
+function buildTrashProject(id: string, name: string): ProjectRecord {
+  const nodes = seedNodes();
+  return {
+    id,
+    name,
+    role: "OWNER",
+    isOwner: true,
+    updatedAt: isoMinutesAgo(600),
+    deletedAt: isoMinutesAgo(300),
+    nodes,
+    edges: seedEdges(nodes),
+    messages: [],
+    history: [],
+  };
+}
+
+// ── 멤버 시드 헬퍼 ────────────────────────────────────────────────────────────
+
+/** 각 프로젝트의 초기 멤버 목록을 생성한다. OWNER는 데모 user, 나머지는 샘플. */
+function seedMembers(ownerRole: Role): Member[] {
+  const owner: Member = {
+    userId: DEMO_USER_ID,
+    name: demoUser.name,
+    email: demoUser.email,
+    role: "OWNER",
+  };
+  if (ownerRole === "OWNER") {
+    return [
+      owner,
+      {
+        userId: uuid(),
+        name: "editor",
+        email: "editor@markflow.app",
+        role: "EDITOR",
+      },
+      {
+        userId: uuid(),
+        name: "viewer",
+        email: "viewer@markflow.app",
+        role: "VIEWER",
+      },
+    ];
+  }
+  // 데모 user가 OWNER가 아닌 프로젝트는 다른 사람이 OWNER
+  return [
+    {
+      userId: uuid(),
+      name: "alice",
+      email: "alice@markflow.app",
+      role: "OWNER",
+    },
+    {
+      userId: DEMO_USER_ID,
+      name: demoUser.name,
+      email: demoUser.email,
+      role: ownerRole,
+    },
+  ];
+}
+
+// ── store 인스턴스(모듈 단일 — in-memory) ────────────────────────────────────
+
+export const db: MockDb = {
+  user: demoUser,
+  verificationCodes: {},
+  projects: [
+    // role 섞어서 권한 UI(OWNER/EDITOR/VIEWER) 확인 가능
+    buildProject(PROJECT_ROADMAP_ID, "제품 로드맵", "OWNER", 5),
+    buildProject(PROJECT_BLOG_ID, "블로그 초안", "EDITOR", 30),
+    buildProject(PROJECT_RESEARCH_ID, "리서치 보드", "VIEWER", 180),
+    // 휴지통 1개
+    buildTrashProject(TRASH_PROJECT_ID, "지난 분기 회고"),
+  ],
+  members: {
+    [PROJECT_ROADMAP_ID]: seedMembers("OWNER"),
+    [PROJECT_BLOG_ID]: seedMembers("EDITOR"),
+    [PROJECT_RESEARCH_ID]: seedMembers("VIEWER"),
+    [TRASH_PROJECT_ID]: seedMembers("OWNER"),
+  },
+};
+
+// ── 셀렉터 ───────────────────────────────────────────────────────────────────
+
+export function findProject(id: string): ProjectRecord | undefined {
+  return db.projects.find((p) => p.id === id);
+}
+
+export function activeProjects(): ProjectRecord[] {
+  return db.projects.filter((p) => p.deletedAt === null);
+}
+
+export function trashedProjects(): ProjectRecord[] {
+  return db.projects.filter((p) => p.deletedAt !== null);
+}
+
+// ── 매핑(record → 응답 DTO) ──────────────────────────────────────────────────
+
+export function toProjectSummary(p: ProjectRecord): ProjectSummary {
+  return {
+    id: p.id,
+    name: p.name,
+    role: p.role,
+    isOwner: p.isOwner,
+    nodeCount: p.nodes.length,
+    updatedAt: p.updatedAt,
+  };
+}
+
+export function toDeletedProject(p: ProjectRecord): DeletedProject {
+  return {
+    id: p.id,
+    name: p.name,
+    // deletedAt !== null 인 record에만 호출됨
+    deletedAt: p.deletedAt ?? isoNow(),
+    isOwner: p.isOwner,
+  };
+}
+
+// ── 변이(런타임 CRUD가 상태에 반영) ──────────────────────────────────────────
+
+export function createProject(name: string): ProjectRecord {
+  // 새 프로젝트는 빈 캔버스로 시작.
+  const record: ProjectRecord = {
+    id: uuid(),
+    name,
+    role: "OWNER",
+    isOwner: true,
+    updatedAt: isoNow(),
+    deletedAt: null,
+    nodes: [],
+    edges: [],
+    messages: [],
+    history: [
+      {
+        id: uuid(),
+        targetType: "PROJECT",
+        targetId: null,
+        targetLabel: name,
+        action: "CREATE",
+        createdAt: isoNow(),
+        user: currentUserRef(),
+      },
+    ],
+  };
+  db.projects.unshift(record);
+  return record;
+}
+
+export function softDeleteProject(id: string): ProjectRecord | undefined {
+  const p = findProject(id);
+  if (!p) return undefined;
+  p.deletedAt = isoNow();
+  return p;
+}
+
+export function restoreProject(id: string): ProjectRecord | undefined {
+  const p = findProject(id);
+  if (!p) return undefined;
+  p.deletedAt = null;
+  p.updatedAt = isoNow();
+  return p;
+}
+
+export function purgeProject(id: string): ProjectRecord | undefined {
+  const idx = db.projects.findIndex((p) => p.id === id);
+  if (idx === -1) return undefined;
+  const [removed] = db.projects.splice(idx, 1);
+  return removed;
+}
+
+export function renameProject(id: string, name: string): ProjectRecord | undefined {
+  const p = findProject(id);
+  if (!p) return undefined;
+  p.name = name;
+  p.updatedAt = isoNow();
+  prependActivity(p, {
+    targetType: "PROJECT",
+    targetId: null,
+    targetLabel: name,
+    action: "RENAME",
+  });
+  return p;
+}
+
+export function updateNode(
+  projectId: string,
+  nodeId: string,
+  patch: Partial<Pick<NodeDTO, "title" | "markdown" | "type" | "collapsed" | "position">>,
+): NodeDTO | undefined {
+  const p = findProject(projectId);
+  if (!p) return undefined;
+  const node = p.nodes.find((n) => n.id === nodeId);
+  if (!node) return undefined;
+
+  if (patch.title !== undefined) node.title = patch.title;
+  if (patch.markdown !== undefined) node.markdown = patch.markdown;
+  if (patch.type !== undefined) node.type = patch.type;
+  if (patch.collapsed !== undefined) node.collapsed = patch.collapsed;
+  if (patch.position !== undefined) node.position = patch.position;
+  node.updatedAt = isoNow();
+  p.updatedAt = node.updatedAt;
+
+  // 위치만 변경하면 MOVE, 그 외는 UPDATE
+  const onlyPosition =
+    patch.position !== undefined &&
+    patch.title === undefined &&
+    patch.markdown === undefined &&
+    patch.type === undefined &&
+    patch.collapsed === undefined;
+  prependActivity(p, {
+    targetType: "NODE",
+    targetId: node.id,
+    targetLabel: node.title,
+    action: onlyPosition ? "MOVE" : "UPDATE",
+  });
+  return node;
+}
+
+export function addMessage(projectId: string, content: string): ChatMessageDTO | undefined {
+  const p = findProject(projectId);
+  if (!p) return undefined;
+  const message: ChatMessageDTO = {
+    id: uuid(),
+    content,
+    createdAt: isoNow(),
+    user: currentUserRef(),
+  };
+  p.messages.push(message);
+  return message;
+}
+
+function prependActivity(
+  p: ProjectRecord,
+  partial: Pick<ActivityDTO, "targetType" | "targetId" | "targetLabel" | "action">,
+): void {
+  p.history.unshift({
+    id: uuid(),
+    createdAt: isoNow(),
+    user: currentUserRef(),
+    ...partial,
+  });
+}
+
+/** 로그인/회원가입 시 입력 email로 데모 user를 갱신하고 토큰을 발급한다. */
+export function loginAs(email: string, name?: string): { user: User; accessToken: string } {
+  db.user = {
+    ...db.user,
+    email,
+    name: name ?? db.user.name,
+  };
+  return { user: db.user, accessToken: issueToken(db.user.id) };
+}
+
+// ── Members 셀렉터·변이 ───────────────────────────────────────────────────────
+
+export function getMembersForProject(projectId: string): Member[] {
+  return db.members[projectId] ?? [];
+}
+
+/**
+ * 멤버 초대. 이미 해당 projectId에 동일 email이 있으면 null 반환(중복).
+ * 초대된 user는 email local-part를 name으로 즉석 생성.
+ */
+export function inviteMember(
+  projectId: string,
+  email: string,
+  role: "EDITOR" | "VIEWER",
+): Member | null {
+  const list = db.members[projectId] ?? [];
+  if (list.some((m) => m.email === email)) return null;
+  const name = email.split("@")[0];
+  const member: Member = { userId: uuid(), name, email, role };
+  db.members[projectId] = [...list, member];
+  return member;
+}
+
+/**
+ * 멤버 역할 변경. 해당 userId가 없거나 OWNER이면 undefined 반환.
+ */
+export function updateMemberRole(
+  projectId: string,
+  userId: string,
+  role: "EDITOR" | "VIEWER",
+): Member | undefined {
+  const list = db.members[projectId] ?? [];
+  const member = list.find((m) => m.userId === userId);
+  if (!member) return undefined;
+  if (member.role === "OWNER") return undefined;
+  member.role = role;
+  return member;
+}
+
+/**
+ * 멤버 제거. OWNER 제거 시도는 "OWNER" 문자열 반환(차단 신호).
+ * 없는 userId이면 undefined 반환. 성공 시 제거된 userId 반환.
+ */
+export function removeMember(
+  projectId: string,
+  userId: string,
+): string | "OWNER" | undefined {
+  const list = db.members[projectId] ?? [];
+  const idx = list.findIndex((m) => m.userId === userId);
+  if (idx === -1) return undefined;
+  if (list[idx].role === "OWNER") return "OWNER";
+  db.members[projectId] = list.filter((_, i) => i !== idx);
+  return userId;
+}
+
+// ── OTP (mock 전용) ────────────────────────────────────────────────────────────
+// 실서버는 verify된 이메일만 signup 허용. 목에서는 단순화 — signup은 별도 제약 없음.
+
+/** 6자리 랜덤 숫자 코드를 생성해 db에 저장하고 반환한다. */
+export function generateCode(email: string): string {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  db.verificationCodes[email] = code;
+  return code;
+}
+
+/** 저장된 코드와 일치하면 true 반환 후 코드를 삭제(1회성). */
+export function verifyCode(email: string, code: string): boolean {
+  const stored = db.verificationCodes[email];
+  if (stored === undefined || stored !== code) return false;
+  delete db.verificationCodes[email];
+  return true;
+}
