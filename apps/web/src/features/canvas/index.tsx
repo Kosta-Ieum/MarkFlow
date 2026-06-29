@@ -1,29 +1,45 @@
-// React Flow 캔버스 화면 — IEUM-21 [F1-1.1] 스캐폴드
-// 팬/줌/미니맵/fitView까지만 담당한다. 커스텀 노드 카드(IEUM-22)·Zustand 캔버스
-// 스토어(IEUM-23)·실시간 동기화(IEUM-34)는 후속 티켓에서 이 화면에 연결된다.
-import { useCallback, useState } from "react";
+
+// React Flow 캔버스 화면 — IEUM-21 [F1-1.1] 스캐폴드 + IEUM-22 [F1-1.2] 노드 카드
+// 노드/엣지는 아직 시드 데이터(seedNodes.ts)다 — 실제 CRUD·영속화는 Zustand 캔버스
+// 스토어(IEUM-23)에서 이 화면에 연결되고, 실시간 동기화는 IEUM-34에서 연결된다.
+import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
+import { MarkdownNodeCard, type MarkdownNodeData } from "./MarkdownNodeCard";
 import { RightPanel } from "./RightPanel";
+import { seedEdges, seedNodes } from "./seedNodes";
 import { ZoomControls } from "./ZoomControls";
 
+const nodeTypes = { markdown: MarkdownNodeCard };
+
+const defaultEdgeOptions = {
+  style: { stroke: "#B9B4A7", strokeWidth: 2, strokeDasharray: "6 6" },
+  className: "animate-mfdash",
+};
+
 function CanvasSurface({
+  nodes,
+  edges,
   rightPanelExpanded,
   rightPanelOffset,
 }: {
+  nodes: Node<MarkdownNodeData>[];
+  edges: Edge[];
+
   rightPanelExpanded: boolean;
   rightPanelOffset: number;
 }) {
   return (
     <div className="relative h-full flex-1">
       <ReactFlow
-        // 노드/엣지는 다음 티켓(IEUM-22 노드 카드, IEUM-23 스토어)에서 연결.
-        nodes={[]}
-        edges={[]}
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        defaultEdgeOptions={defaultEdgeOptions}
         defaultViewport={DEFAULT_VIEWPORT}
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
@@ -44,8 +60,12 @@ export function CanvasPage() {
   const [leftExpanded, setLeftExpanded] = useState(true);
   const [rightExpanded, setRightExpanded] = useState(false);
 
+  // TODO(IEUM-23): Zustand 캔버스 스토어로 교체. 지금은 시드 데이터만 보여준다.
+  const nodes = useMemo(() => seedNodes, []);
+  const edges = useMemo(() => seedEdges, []);
+
   const handleAddNode = useCallback(() => {
-    // 노드 생성 로직은 IEUM-22(노드 카드) + IEUM-23(스토어)에서 구현.
+    // 노드 생성은 Zustand 캔버스 스토어(IEUM-23)에서 구현.
   }, []);
 
   return (
@@ -56,9 +76,14 @@ export function CanvasPage() {
           expanded={leftExpanded}
           onToggle={() => setLeftExpanded((v) => !v)}
           onAddNode={handleAddNode}
-          nodeCount={0}
+          nodeCount={nodes.length}
         />
-        <CanvasSurface rightPanelExpanded={rightExpanded} rightPanelOffset={372} />
+        <CanvasSurface
+          nodes={nodes}
+          edges={edges}
+          rightPanelExpanded={rightExpanded}
+          rightPanelOffset={372}
+        />
         <RightPanel expanded={rightExpanded} onToggle={() => setRightExpanded((v) => !v)} />
       </div>
     </ReactFlowProvider>
