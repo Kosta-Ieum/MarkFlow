@@ -6,7 +6,9 @@ import { AppShell } from "../components";
 import { AuthPage } from "../features/auth";
 import { CanvasPage } from "../features/canvas";
 import { LandingPage } from "../features/landing";
+import { NodeEditorPage } from "../features/node-editor";
 import { ProjectsPage } from "../features/projects";
+import { TrashPage } from "../features/trash";
 import { useAuthStore } from "../store/authStore";
 
 interface ProtectedRouteProps {
@@ -37,10 +39,26 @@ export function AppRoutes() {
           }
         />
         <Route
+          path="/projects/trash"
+          element={
+            <ProtectedRoute>
+              <TrashPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/p/:projectId"
           element={
             <ProtectedRoute>
               <CanvasPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/p/:projectId/n/:nodeId"
+          element={
+            <ProtectedRoute>
+              <NodeEditorPage />
             </ProtectedRoute>
           }
         />
