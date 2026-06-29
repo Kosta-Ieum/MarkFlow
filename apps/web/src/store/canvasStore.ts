@@ -1,2 +1,155 @@
-// nodes·edges (applyLocal/applyRemote)
-// TODO: 구현 (와이어프레임 스텁)
+// nodes·edges (applyLocal/applyRemote) — IEUM-23 [F1-1.3] 로컬 CRUD
+// 단일 진실원(.claude/rules/frontend.md): React Flow·노드카드는 이 store만 구독/호출한다.
+// applyLocal*  = 내 동작 (이후 IEUM-34에서 emit 지점이 됨, 지금은 emit 없음)
+// applyRemote* = 원격 수신 적용 전용 (재emit 금지) — 호출자는 IEUM-34 소켓 핸들러
+import { create } from "zustand";
+import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
+import type { Edge, EdgeChange, Node, NodeChange, OnConnect, XYPosition } from "@xyflow/react";
+import type { NodeType } from "@markflow/shared";
+
+export interface MarkdownNodeData extends Record<string, unknown> {
+  title: string;
+  markdown: string;
+  type: NodeType;
+  collapsed: boolean;
+}
+
+export type CanvasNode = Node<MarkdownNodeData>;
+
+interface CanvasState {
+  nodes: CanvasNode[];
+  edges: Edge[];
+  /** 소프트 삭제된 노드 — 휴지통(IEUM-28)에서 사용. 복구 시 엣지는 미복원(§CV-16). */
+  trashedNodes: CanvasNode[];
+
+  // React Flow 이벤트 바인딩 — 로컬 선택/드래그만 처리. 삭제(remove)는 무시하고
+  // applyLocalDeleteNode를 통해서만 소프트 삭제한다(하드 삭제 경로 차단).
+  onNodesChange: (changes: NodeChange[]) => void;
+  onEdgesChange: (changes: EdgeChange[]) => void;
+  onConnect: OnConnect;
+
+  applyLocalAddNode: (position: XYPosition, type?: NodeType) => string;
+  applyLocalUpdateNode: (id: string, patch: Partial<Pick<MarkdownNodeData, "title" | "markdown" | "type">>) => void;
+  applyLocalToggleCollapse: (id: string) => void;
+  applyLocalDeleteNode: (id: string) => void;
+  applyLocalRestoreNode: (id: string) => void;
+  applyLocalAddEdge: (source: string, target: string) => void;
+  applyLocalDeleteEdge: (id: string) => void;
+
+  applyRemoteAddNode: (node: CanvasNode) => void;
+  applyRemoteUpdateNode: (id: string, patch: Partial<MarkdownNodeData>, position?: XYPosition) => void;
+  applyRemoteDeleteNode: (id: string) => void;
+  applyRemoteAddEdge: (edge: Edge) => void;
+  applyRemoteDeleteEdge: (id: string) => void;
+}
+
+const newId = () => crypto.randomUUID();
+
+export const useCanvasStore = create<CanvasState>((set, get) => ({
+  nodes: [],
+  edges: [],
+  trashedNodes: [],
+
+  onNodesChange: (changes) => {
+    const nonRemove = changes.filter((c) => c.type !== "remove");
+    set((state) => ({ nodes: applyNodeChanges(nonRemove, state.nodes) as CanvasNode[] }));
+  },
+
+  onEdgesChange: (changes) => {
+    set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
+  },
+
+  onConnect: (connection) => {
+    if (!connection.source || !connection.target) return;
+    get().applyLocalAddEdge(connection.source, connection.target);
+  },
+
+  applyLocalAddNode: (position, type = "idea") => {
+    const id = newId();
+    const node: CanvasNode = {
+      id,
+      type: "markdown",
+      position,
+      data: { title: "새 노드", markdown: "", type, collapsed: true },
+    };
+    set((state) => ({ nodes: [...state.nodes, node] }));
+    return id;
+  },
+
+  applyLocalUpdateNode: (id, patch) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
+    }));
+  },
+
+  applyLocalToggleCollapse: (id) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, collapsed: !n.data.collapsed } } : n,
+      ),
+    }));
+  },
+
+  // 소프트 삭제 + 연결된 엣지 물리 삭제 (§CV-08 — 복구 시 엣지는 미복원 §CV-16)
+  applyLocalDeleteNode: (id) => {
+    set((state) => {
+      const target = state.nodes.find((n) => n.id === id);
+      if (!target) return state;
+      return {
+        nodes: state.nodes.filter((n) => n.id !== id),
+        edges: state.edges.filter((e) => e.source !== id && e.target !== id),
+        trashedNodes: [...state.trashedNodes, target],
+      };
+    });
+  },
+
+  applyLocalRestoreNode: (id) => {
+    set((state) => {
+      const target = state.trashedNodes.find((n) => n.id === id);
+      if (!target) return state;
+      return {
+        trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
+        nodes: [...state.nodes, target],
+      };
+    });
+  },
+
+  applyLocalAddEdge: (source, target) => {
+    const edge: Edge = { id: newId(), source, target };
+    set((state) => ({ edges: [...state.edges, edge] }));
+  },
+
+  applyLocalDeleteEdge: (id) => {
+    set((state) => ({ edges: state.edges.filter((e) => e.id !== id) }));
+  },
+
+  // --- 원격 수신 적용 (재emit 금지) ---
+  applyRemoteAddNode: (node) => {
+    set((state) => ({ nodes: [...state.nodes, node] }));
+  },
+
+  applyRemoteUpdateNode: (id, patch, position) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
+        n.id === id
+          ? { ...n, position: position ?? n.position, data: { ...n.data, ...patch } }
+          : n,
+      ),
+    }));
+  },
+
+  applyRemoteDeleteNode: (id) => {
+    set((state) => ({
+      nodes: state.nodes.filter((n) => n.id !== id),
+      edges: state.edges.filter((e) => e.source !== id && e.target !== id),
+    }));
+  },
+
+  applyRemoteAddEdge: (edge) => {
+    set((state) => ({ edges: [...state.edges, edge] }));
+  },
+
+  applyRemoteDeleteEdge: (id) => {
+    set((state) => ({ edges: state.edges.filter((e) => e.id !== id) }));
+  },
+}));
