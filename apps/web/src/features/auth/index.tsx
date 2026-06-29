@@ -1,41 +1,442 @@
-// 로그인·회원가입 화면 (셸 토대 — 폼/검증/네트워크는 후속 티켓)
-// TODO(IEUM-19): react-hook-form + shared zod 폼
-import { Link } from "react-router-dom";
+// 로그인·회원가입 화면 — react-hook-form + shared zod schema (IEUM-19 + 이메일 OTP)
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type {
+  LoginRequest,
+  SendCodeResponse,
+  SignupRequest,
+  VerifyEmailRequest,
+  VerifyEmailResponse,
+} from "@markflow/shared";
+import {
+  LoginRequestSchema,
+  SignupRequestSchema,
+  VerifyEmailRequestSchema,
+} from "@markflow/shared";
+import { api } from "../../lib/api";
+import { useAuthStore } from "../../store/authStore";
 
 interface AuthPageProps {
   mode: "login" | "signup";
 }
 
+// ── LoginForm ──────────────────────────────────────────────────────────────
+
+interface LoginFormProps {
+  onSuccess: () => void;
+}
+
+function LoginForm({ onSuccess }: LoginFormProps) {
+  const [serverError, setServerError] = useState<string | null>(null);
+  const { login, isLoading } = useAuthStore();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginRequest>({
+    resolver: zodResolver(LoginRequestSchema),
+  });
+
+  const handleLogin = handleSubmit(async (data) => {
+    setServerError(null);
+    try {
+      await login(data.email, data.password);
+      onSuccess();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "로그인 중 오류가 발생했습니다.";
+      setServerError(message);
+    }
+  });
+
+  const busy = isSubmitting || isLoading;
+
+  return (
+    <form onSubmit={handleLogin} noValidate>
+      {serverError && (
+        <div
+          role="alert"
+          className="mb-6 rounded-lg border border-error-border bg-error-bg px-4 py-3 text-sm text-error"
+        >
+          {serverError}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4">
+        {/* 이메일 */}
+        <div>
+          <label htmlFor="login-email" className="mb-1.5 block text-sm font-medium text-secondary">
+            이메일
+          </label>
+          <input
+            id="login-email"
+            type="email"
+            autoComplete="email"
+            placeholder="hello@example.com"
+            className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            {...register("email")}
+          />
+          {errors.email && (
+            <p className="mt-1 text-xs text-error">{errors.email.message}</p>
+          )}
+        </div>
+
+        {/* 비밀번호 */}
+        <div>
+          <label
+            htmlFor="login-password"
+            className="mb-1.5 block text-sm font-medium text-secondary"
+          >
+            비밀번호
+          </label>
+          <input
+            id="login-password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            {...register("password")}
+          />
+          {errors.password && (
+            <p className="mt-1 text-xs text-error">{errors.password.message}</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={busy}
+        className="mt-6 w-full rounded-[10px] bg-ink px-4 py-2.5 text-sm font-semibold text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? "처리 중…" : "로그인"}
+      </button>
+    </form>
+  );
+}
+
+// ── SignupForm ─────────────────────────────────────────────────────────────
+
+interface SignupFormProps {
+  defaultValues?: Partial<SignupRequest>;
+  onVerifyNeeded: (name: string, email: string, password: string) => void;
+}
+
+function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SignupRequest>({
+    resolver: zodResolver(SignupRequestSchema),
+    defaultValues,
+  });
+
+  // 가입은 여기서 하지 않는다 — 이메일 인증 단계(VerifyStep)로 전환만.
+  const handleSignup = handleSubmit((data) => {
+    onVerifyNeeded(data.name, data.email, data.password);
+  });
+
+  const busy = isSubmitting;
+
+  return (
+    <form onSubmit={handleSignup} noValidate>
+      <div className="flex flex-col gap-4">
+        {/* 이름 */}
+        <div>
+          <label htmlFor="signup-name" className="mb-1.5 block text-sm font-medium text-secondary">
+            이름
+          </label>
+          <input
+            id="signup-name"
+            type="text"
+            autoComplete="name"
+            placeholder="홍길동"
+            className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            {...register("name")}
+          />
+          {errors.name && (
+            <p className="mt-1 text-xs text-error">{errors.name.message}</p>
+          )}
+        </div>
+
+        {/* 이메일 */}
+        <div>
+          <label
+            htmlFor="signup-email"
+            className="mb-1.5 block text-sm font-medium text-secondary"
+          >
+            이메일
+          </label>
+          <input
+            id="signup-email"
+            type="email"
+            autoComplete="email"
+            placeholder="hello@example.com"
+            className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            {...register("email")}
+          />
+          {errors.email && (
+            <p className="mt-1 text-xs text-error">{errors.email.message}</p>
+          )}
+        </div>
+
+        {/* 비밀번호 */}
+        <div>
+          <label
+            htmlFor="signup-password"
+            className="mb-1.5 block text-sm font-medium text-secondary"
+          >
+            비밀번호
+          </label>
+          <input
+            id="signup-password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="••••••••"
+            className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            {...register("password")}
+          />
+          {errors.password && (
+            <p className="mt-1 text-xs text-error">{errors.password.message}</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={busy}
+        className="mt-6 w-full rounded-[10px] bg-ink px-4 py-2.5 text-sm font-semibold text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? "처리 중…" : "이메일로 인증 코드 받기"}
+      </button>
+    </form>
+  );
+}
+
+// ── VerifyStep ─────────────────────────────────────────────────────────────
+
+interface VerifyStepProps {
+  name: string;
+  email: string;
+  password: string;
+  onBack: () => void;
+  onSuccess: () => void;
+}
+
+type VerifyCodeForm = Pick<VerifyEmailRequest, "code">;
+
+function VerifyStep({ name, email, password, onBack, onSuccess }: VerifyStepProps) {
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const sentRef = useRef(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<VerifyCodeForm>({
+    resolver: zodResolver(VerifyEmailRequestSchema.pick({ code: true })),
+  });
+
+  const sendCode = async () => {
+    setServerError(null);
+    try {
+      await api<SendCodeResponse>("/auth/email/send-code", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "인증 코드 전송 중 오류가 발생했습니다.";
+      setServerError(message);
+    }
+  };
+
+  // mount 시 1회 자동 발송 — StrictMode 이중 호출은 ref 가드로 차단.
+  useEffect(() => {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    void sendCode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleResend = async () => {
+    setNotice(null);
+    await sendCode();
+    setNotice("코드를 다시 보냈어요.");
+  };
+
+  const handleVerify = handleSubmit(async ({ code }) => {
+    setServerError(null);
+    setNotice(null);
+    try {
+      const result = await api<VerifyEmailResponse>("/auth/email/verify", {
+        method: "POST",
+        body: JSON.stringify({ email, code }),
+      });
+      if (!result?.verified) {
+        setServerError("인증 코드가 올바르지 않습니다.");
+        return;
+      }
+      await useAuthStore.getState().signup(name, email, password);
+      onSuccess();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "인증 코드가 올바르지 않습니다.";
+      setServerError(message);
+    }
+  });
+
+  return (
+    <form onSubmit={handleVerify} noValidate>
+      {serverError && (
+        <div
+          role="alert"
+          className="mb-6 rounded-lg border border-error-border bg-error-bg px-4 py-3 text-sm text-error"
+        >
+          {serverError}
+        </div>
+      )}
+
+      <p className="mb-6 text-sm text-secondary">
+        {email} 로 6자리 인증 코드를 보냈어요. 받은 편지함을 확인해 주세요.
+      </p>
+
+      <div className="flex flex-col gap-4">
+        <div>
+          <label
+            htmlFor="verify-code"
+            className="mb-1.5 block text-sm font-medium text-secondary"
+          >
+            인증 코드
+          </label>
+          <input
+            id="verify-code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="000000"
+            className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-center text-lg tracking-[0.3em] text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            {...register("code")}
+          />
+          {errors.code && (
+            <p className="mt-1 text-xs text-error">{errors.code.message}</p>
+          )}
+          {notice && <p className="mt-1 text-xs text-secondary">{notice}</p>}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="mt-6 w-full rounded-[10px] bg-ink px-4 py-2.5 text-sm font-semibold text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isSubmitting ? "처리 중…" : "인증하고 가입 완료"}
+      </button>
+
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <button
+          type="button"
+          onClick={onBack}
+          className="font-medium text-muted transition-colors hover:text-secondary"
+        >
+          ← 뒤로
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleResend()}
+          className="font-medium text-brand transition-opacity hover:opacity-80"
+        >
+          코드 재전송
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ── AuthPage ───────────────────────────────────────────────────────────────
+
+interface PendingSignup {
+  name: string;
+  email: string;
+  password: string;
+}
+
 export function AuthPage({ mode }: AuthPageProps) {
   const isLogin = mode === "login";
+  const navigate = useNavigate();
+
+  // 회원가입 2단계: input ↔ verify. 입력값(pending)은 상위에서 보관해 뒤로/재전송 시 유지.
+  const [pending, setPending] = useState<PendingSignup | null>(null);
+  const [step, setStep] = useState<"input" | "verify">("input");
+  const isVerifyStep = !isLogin && step === "verify" && pending !== null;
+
+  const handleSuccess = () => {
+    void navigate("/projects");
+  };
 
   return (
     <section className="mx-auto flex max-w-md animate-mfup flex-col px-6 py-20">
       <div className="rounded-2xl border border-line bg-surface p-8">
         <h2 className="font-display text-2xl font-bold text-ink">
-          {isLogin ? "로그인" : "회원가입"}
+          {isLogin
+            ? "다시 오신 걸 환영해요"
+            : isVerifyStep
+              ? "이메일을 확인해 주세요"
+              : "Markflow 시작하기"}
         </h2>
-        <p className="mt-3 text-sm text-secondary">
-          {isLogin ? "로그인" : "회원가입"} (F2-1.3 구현 예정)
+        <p className="mt-2 text-sm text-secondary">
+          {isLogin
+            ? "계속하려면 로그인하세요"
+            : isVerifyStep
+              ? "인증 코드를 입력하면 가입이 완료돼요"
+              : "몇 초면 계정을 만들 수 있어요"}
         </p>
 
-        <p className="mt-8 text-sm text-muted">
+        <div className="mt-8">
           {isLogin ? (
-            <>
-              계정이 없으신가요?{" "}
-              <Link to="/signup" className="font-medium text-brand">
-                회원가입
-              </Link>
-            </>
+            <LoginForm onSuccess={handleSuccess} />
+          ) : isVerifyStep && pending ? (
+            <VerifyStep
+              name={pending.name}
+              email={pending.email}
+              password={pending.password}
+              onBack={() => setStep("input")}
+              onSuccess={handleSuccess}
+            />
           ) : (
-            <>
-              이미 계정이 있으신가요?{" "}
-              <Link to="/login" className="font-medium text-brand">
-                로그인
-              </Link>
-            </>
+            <SignupForm
+              defaultValues={pending ?? undefined}
+              onVerifyNeeded={(name, email, password) => {
+                setPending({ name, email, password });
+                setStep("verify");
+              }}
+            />
           )}
-        </p>
+        </div>
+
+        {!isVerifyStep && (
+          <p className="mt-6 text-sm text-muted">
+            {isLogin ? (
+              <>
+                아직 계정이 없으신가요?{" "}
+                <Link to="/signup" className="font-medium text-brand">
+                  회원가입
+                </Link>
+              </>
+            ) : (
+              <>
+                이미 계정이 있으신가요?{" "}
+                <Link to="/login" className="font-medium text-brand">
+                  로그인
+                </Link>
+              </>
+            )}
+          </p>
+        )}
       </div>
     </section>
   );

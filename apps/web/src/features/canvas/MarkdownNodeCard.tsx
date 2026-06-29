@@ -3,6 +3,7 @@
 // 접힘: 제목 + 첫 비제목 라인 26자 truncate. 펼침: 마크다운 렌더 본문.
 // 실제 데이터 영속화(Zustand 스토어 연동)는 IEUM-23, 전체화면 에디터는 별도 페이지 티켓 범위.
 import { memo } from "react";
+
 import type { MouseEvent } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import MDEditor from "@uiw/react-md-editor";
