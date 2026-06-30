@@ -7,10 +7,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UseGuards,
 } from "@nestjs/common";
 import { ProjectService } from "./project.service.js";
 import type { JwtPayload } from "../../common/guards/jwt-auth.guard.js";
+import { ProjectRoleGuard } from "../../common/guards/project-role.guard.js";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
+import { RequireRole } from "../../common/decorators/require-role.decorator.js";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe.js";
 import {
   ProjectCreateRequestSchema,
@@ -38,6 +41,8 @@ export class ProjectController {
   }
 
   @Patch(":id")
+  @UseGuards(ProjectRoleGuard)
+  @RequireRole("OWNER")
   update(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
@@ -47,6 +52,8 @@ export class ProjectController {
   }
 
   @Delete(":id")
+  @UseGuards(ProjectRoleGuard)
+  @RequireRole("OWNER")
   remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
     return this.projectService.delete(id, user.sub);
   }
