@@ -87,10 +87,6 @@ export function CanvasPage() {
     applyLocalAddNode({ x: 0, y: 0 });
   };
 
-  const handleAddNode = () => {
-    applyLocalAddNode({ x: 0, y: 0 });
-  };
-
   return (
     <ReactFlowProvider>
       <div className="flex h-screen w-full overflow-hidden bg-canvas">
