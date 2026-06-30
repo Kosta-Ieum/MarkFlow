@@ -16,11 +16,14 @@ import type {
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
 
 let idSeq = 0;
-/** 시드/런타임 공용 결정적 UUID 생성기(데모용 — 형식만 uuid면 충분). */
+// 탭마다 db.ts 모듈이 독립 실행되므로(아래 localStorage 동기화 참고), idSeq만으로는
+// 여러 탭이 동시에 새 id를 만들 때 충돌할 수 있다 — 탭별 랜덤 salt를 섞어 고유성 확보.
+const TAB_SALT = Math.random().toString(16).slice(2, 6).padStart(4, "0");
+/** 시드/런타임 공용 UUID 생성기(데모용 — 형식만 uuid면 충분, 탭 간 고유성 보장). */
 export function uuid(): string {
   idSeq += 1;
-  const hex = idSeq.toString(16).padStart(12, "0");
-  return `00000000-0000-4000-8000-${hex}`;
+  const hex = idSeq.toString(16).padStart(8, "0");
+  return `00000000-0000-4000-8000-${TAB_SALT}${hex}`;
 }
 
 function isoNow(): string {
@@ -68,6 +71,8 @@ interface MockDb {
   verificationCodes: Record<string, string>;
   /** projectId → Member[] (프로젝트별 멤버 목록). */
   members: Record<string, Member[]>;
+  /** email → 회원가입 시 입력한 이름. 로그인(이름 없이)할 때 이걸로 복원한다. */
+  knownUsers: Record<string, string>;
 }
 
 // ── 시드 데이터 ──────────────────────────────────────────────────────────────
@@ -309,30 +314,115 @@ export const db: MockDb = {
     [PROJECT_RESEARCH_ID]: seedMembers("VIEWER"),
     [TRASH_PROJECT_ID]: seedMembers("OWNER"),
   },
+  knownUsers: { [demoUser.email]: demoUser.name },
 };
 
+// ── 탭 간 동기화 ─────────────────────────────────────────────────────────────
+// db.ts는 탭(=page)마다 별도 JS 모듈 인스턴스라 메모리가 공유 안 된다(실DB가 아님).
+// projects/members만 localStorage + "storage" 이벤트로 다른 탭에 릴레이한다.
+// db.user(로그인 계정)는 탭마다 다른 게 맞으므로 동기화 대상에서 제외.
+const SHARED_STORAGE_KEY = "markflow-mock-shared-db";
+
+interface SharedSnapshot {
+  projects: ProjectRecord[];
+  members: Record<string, Member[]>;
+  knownUsers: Record<string, string>;
+}
+
+function persistShared(): void {
+  const snapshot: SharedSnapshot = { projects: db.projects, members: db.members, knownUsers: db.knownUsers };
+  localStorage.setItem(SHARED_STORAGE_KEY, JSON.stringify(snapshot));
+}
+
+function hydrateFromStorage(): boolean {
+  const raw = localStorage.getItem(SHARED_STORAGE_KEY);
+  if (!raw) return false;
+  try {
+    const snapshot = JSON.parse(raw) as SharedSnapshot;
+    db.projects = snapshot.projects;
+    db.members = snapshot.members;
+    db.knownUsers = { ...db.knownUsers, ...snapshot.knownUsers };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+if (!hydrateFromStorage()) {
+  // 이 탭이 첫 시드 — 다른 탭이 hydrate할 수 있게 즉시 기록.
+  persistShared();
+}
+
+// db.user(= "이 탭에서 현재 로그인된 사람")는 모듈이 새로고침마다 재실행되며 매번
+// 시드 데모 user로 리셋된다 — authStore(FE)는 sessionStorage로 탭별 세션을 유지하게
+// 고쳤는데 mock 백엔드 쪽이 안 맞으면 새로고침 후 "내 메시지" 판별·락 주체 등이 다시 어긋난다.
+// sessionStorage(탭 전용, localStorage와 달리 다른 탭과 공유 안 됨)에 이 탭의 로그인 user를
+// 함께 보존한다.
+const USER_STORAGE_KEY = "markflow-mock-user";
+
+function persistUser(): void {
+  sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(db.user));
+}
+
+function hydrateUserFromStorage(): void {
+  const raw = sessionStorage.getItem(USER_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    db.user = JSON.parse(raw) as User;
+  } catch {
+    // 무시 — 시드 데모 user 그대로 유지.
+  }
+}
+
+hydrateUserFromStorage();
+
+window.addEventListener("storage", (e) => {
+  if (e.key !== SHARED_STORAGE_KEY || !e.newValue) return;
+  try {
+    const snapshot = JSON.parse(e.newValue) as SharedSnapshot;
+    db.projects = snapshot.projects;
+    db.members = snapshot.members;
+    db.knownUsers = { ...db.knownUsers, ...snapshot.knownUsers };
+  } catch {
+    // 무시 — 다음 변이에서 다시 맞춰진다.
+  }
+});
+
+// ── 멤버십 ───────────────────────────────────────────────────────────────────
+
+function isMember(projectId: string, email: string): boolean {
+  return (db.members[projectId] ?? []).some((m) => m.email === email);
+}
+
+export function roleOf(projectId: string, email: string): Role {
+  return (db.members[projectId] ?? []).find((m) => m.email === email)?.role ?? "VIEWER";
+}
+
 // ── 셀렉터 ───────────────────────────────────────────────────────────────────
+// 같은 projects/members를 여러 계정(탭)이 공유하므로, role/isOwner는 레코드의
+// 정적 필드가 아니라 "현재 로그인한 db.user 기준 멤버십"으로 매번 계산한다.
 
 export function findProject(id: string): ProjectRecord | undefined {
   return db.projects.find((p) => p.id === id);
 }
 
 export function activeProjects(): ProjectRecord[] {
-  return db.projects.filter((p) => p.deletedAt === null);
+  return db.projects.filter((p) => p.deletedAt === null && isMember(p.id, db.user.email));
 }
 
 export function trashedProjects(): ProjectRecord[] {
-  return db.projects.filter((p) => p.deletedAt !== null);
+  return db.projects.filter((p) => p.deletedAt !== null && isMember(p.id, db.user.email));
 }
 
 // ── 매핑(record → 응답 DTO) ──────────────────────────────────────────────────
 
 export function toProjectSummary(p: ProjectRecord): ProjectSummary {
+  const role = roleOf(p.id, db.user.email);
   return {
     id: p.id,
     name: p.name,
-    role: p.role,
-    isOwner: p.isOwner,
+    role,
+    isOwner: role === "OWNER",
     nodeCount: p.nodes.length,
     updatedAt: p.updatedAt,
   };
@@ -344,7 +434,7 @@ export function toDeletedProject(p: ProjectRecord): DeletedProject {
     name: p.name,
     // deletedAt !== null 인 record에만 호출됨
     deletedAt: p.deletedAt ?? isoNow(),
-    isOwner: p.isOwner,
+    isOwner: roleOf(p.id, db.user.email) === "OWNER",
   };
 }
 
@@ -376,6 +466,10 @@ export function createProject(name: string): ProjectRecord {
     ],
   };
   db.projects.unshift(record);
+  db.members[record.id] = [
+    { userId: db.user.id, name: db.user.name, email: db.user.email, role: "OWNER" },
+  ];
+  persistShared();
   return record;
 }
 
@@ -383,6 +477,7 @@ export function softDeleteProject(id: string): ProjectRecord | undefined {
   const p = findProject(id);
   if (!p) return undefined;
   p.deletedAt = isoNow();
+  persistShared();
   return p;
 }
 
@@ -391,6 +486,7 @@ export function restoreProject(id: string): ProjectRecord | undefined {
   if (!p) return undefined;
   p.deletedAt = null;
   p.updatedAt = isoNow();
+  persistShared();
   return p;
 }
 
@@ -398,6 +494,8 @@ export function purgeProject(id: string): ProjectRecord | undefined {
   const idx = db.projects.findIndex((p) => p.id === id);
   if (idx === -1) return undefined;
   const [removed] = db.projects.splice(idx, 1);
+  delete db.members[id];
+  persistShared();
   return removed;
 }
 
@@ -412,6 +510,7 @@ export function renameProject(id: string, name: string): ProjectRecord | undefin
     targetLabel: name,
     action: "RENAME",
   });
+  persistShared();
   return p;
 }
 
@@ -446,6 +545,7 @@ export function updateNode(
     targetLabel: node.title,
     action: onlyPosition ? "MOVE" : "UPDATE",
   });
+  persistShared();
   return node;
 }
 
@@ -457,9 +557,24 @@ export function replaceCanvas(
 ): ProjectRecord | undefined {
   const p = findProject(projectId);
   if (!p) return undefined;
+  // 노드 생성은 별도 POST /nodes 없이 이 일괄저장(자동저장) 경로로만 들어온다 — 그래서
+  // CREATE가 히스토리에 한 번도 안 남았다. 이전 id 집합에 없던 새 id만 CREATE로 기록.
+  // UPDATE/MOVE는 PATCH /nodes/:id(updateNode)에서, DELETE는 별도 핸들러에서 이미 기록된다.
+  const prevIds = new Set(p.nodes.map((n) => n.id));
+  for (const node of nodes) {
+    if (!prevIds.has(node.id)) {
+      prependActivity(p, {
+        targetType: "NODE",
+        targetId: node.id,
+        targetLabel: node.title,
+        action: "CREATE",
+      });
+    }
+  }
   p.nodes = nodes;
   p.edges = edges;
   p.updatedAt = isoNow();
+  persistShared();
   return p;
 }
 
@@ -478,6 +593,7 @@ export function softDeleteNode(
   p.edges = p.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
   p.updatedAt = deletedAt;
   prependActivity(p, { targetType: "NODE", targetId: node.id, targetLabel: node.title, action: "DELETE" });
+  persistShared();
   return { id: nodeId, deletedAt };
 }
 
@@ -493,6 +609,7 @@ export function restoreNode(
   p.nodes.push(node);
   p.updatedAt = isoNow();
   prependActivity(p, { targetType: "NODE", targetId: node.id, targetLabel: node.title, action: "RESTORE" });
+  persistShared();
   return { id: nodeId, deletedAt: null };
 }
 
@@ -502,15 +619,27 @@ export function purgeNode(projectId: string, nodeId: string): { id: string; purg
   const idx = p.trashedNodes.findIndex((n) => n.id === nodeId);
   if (idx === -1) return { id: nodeId, purged: false };
   p.trashedNodes.splice(idx, 1);
+  persistShared();
   return { id: nodeId, purged: true };
 }
 
 export function listTrashedNodes(
   projectId: string,
-): { id: string; title: string; type: NodeDTO["type"]; deletedAt: string }[] | undefined {
+): (NodeDTO & { deletedAt: string })[] | undefined {
   const p = findProject(projectId);
   if (!p) return undefined;
-  return p.trashedNodes.map((n) => ({ id: n.id, title: n.title, type: n.type, deletedAt: n.deletedAt }));
+  // BE 계약 변경(TrashNode에 markdown/position 추가, 요청 중) 선반영 — 새로고침 시
+  // 휴지통 미리보기·위치가 유실되던 문제(§CV-16) 대응. 실제 BE 배포되면 형태 일치.
+  return p.trashedNodes.map((n) => ({
+    id: n.id,
+    title: n.title,
+    type: n.type,
+    markdown: n.markdown,
+    collapsed: n.collapsed,
+    position: n.position,
+    deletedAt: n.deletedAt,
+    updatedAt: n.updatedAt,
+  }));
 }
 
 export function addMessage(projectId: string, content: string): ChatMessageDTO | undefined {
@@ -523,6 +652,7 @@ export function addMessage(projectId: string, content: string): ChatMessageDTO |
     user: currentUserRef(),
   };
   p.messages.push(message);
+  persistShared();
   return message;
 }
 
@@ -540,11 +670,18 @@ function prependActivity(
 
 /** 로그인/회원가입 시 입력 email로 데모 user를 갱신하고 토큰을 발급한다. */
 export function loginAs(email: string, name?: string): { user: User; accessToken: string } {
+  // 회원가입(name 있음)은 knownUsers에 등록해둔다. 로그인(name 없음)은 항상 이전
+  // db.user.name(보통 시드 "데모 사용자")을 그대로 썼었다 — 그래서 어느 계정으로
+  // 로그인해도 닉네임이 항상 "데모 사용자"였다. knownUsers에 가입 시 이름이 있으면
+  // 그걸 쓰고, 전혀 모르는 이메일이면 그제서야 local-part로 폴백한다.
+  if (name) db.knownUsers[email] = name;
   db.user = {
     ...db.user,
     email,
-    name: name ?? db.user.name,
+    name: name ?? db.knownUsers[email] ?? email.split("@")[0],
   };
+  persistUser();
+  persistShared();
   return { user: db.user, accessToken: issueToken(db.user.id) };
 }
 
@@ -568,6 +705,7 @@ export function inviteMember(
   const name = email.split("@")[0];
   const member: Member = { userId: uuid(), name, email, role };
   db.members[projectId] = [...list, member];
+  persistShared();
   return member;
 }
 
@@ -584,6 +722,7 @@ export function updateMemberRole(
   if (!member) return undefined;
   if (member.role === "OWNER") return undefined;
   member.role = role;
+  persistShared();
   return member;
 }
 
@@ -600,6 +739,7 @@ export function removeMember(
   if (idx === -1) return undefined;
   if (list[idx].role === "OWNER") return "OWNER";
   db.members[projectId] = list.filter((_, i) => i !== idx);
+  persistShared();
   return userId;
 }
 

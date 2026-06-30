@@ -5,9 +5,17 @@
 import { create } from "zustand";
 import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import type { Edge, EdgeChange as FlowEdgeChange, Node, NodeChange as FlowNodeChange, OnConnect, XYPosition } from "@xyflow/react";
-import type { EdgeDTO, NodeDTO, NodeType } from "@markflow/shared";
+import type { EdgeDTO, NodeDTO, NodeType, XY } from "@markflow/shared";
 
-import { deleteNode as deleteNodeApi, fetchCanvas, purgeNode as purgeNodeApi, restoreNode as restoreNodeApi, saveCanvasSnapshot } from "../lib/canvasApi";
+import {
+  deleteNode as deleteNodeApi,
+  fetchCanvas,
+  fetchTrash,
+  purgeNode as purgeNodeApi,
+  restoreNode as restoreNodeApi,
+  saveCanvasSnapshot,
+  type TrashNode,
+} from "../lib/canvasApi";
 import type { CollabAPI } from "../collab/CollabAPI";
 
 // BE 노드 REST(IEUM-24)가 아직 스텁이라 호출이 실패할 수 있다 — 화면은 항상 로컬
@@ -21,6 +29,33 @@ function fireAndForget(promise: Promise<unknown>) {
 let activeCollab: CollabAPI | null = null;
 export function setActiveCollab(collab: CollabAPI | null): void {
   activeCollab = collab;
+}
+
+/** 소프트 락 획득/해제 — 카드 컴포넌트(MarkdownNodeCard)가 편집 진입/이탈 시 호출. */
+export function requestNodeLock(nodeId: string | null): void {
+  activeCollab?.emitLock(nodeId);
+}
+
+/** 커서 위치 emit — CanvasSurface의 pointermove에서 호출(throttle은 collab 구현체 내부). */
+export function emitCursorPosition(p: XY): void {
+  activeCollab?.emitCursor(p);
+}
+
+/**
+ * 채팅 전송 — ChatThread(MessageComposer)가 호출. 컴포넌트가 useCollaboration()을 또
+ * 호출하면 connect() 안 된 별개 인스턴스가 생겨 emit이 no-op이 된다 — 반드시 이걸 통해서만.
+ */
+export function sendChatMessage(content: string): void {
+  activeCollab?.sendChat(content);
+}
+
+/**
+ * 노드 변경 emit만 — 로컬 store(nodes)는 호출자가 이미 갱신했거나(REST가 단일 진실원인
+ * 화면, 예: 노드 에디터) 별도 관리 중인 경우에 쓴다. canvasStore의 nodes도 같이 바꾸려면
+ * applyLocalUpdateNode를 쓸 것 — 이건 emit 전용 우회로다.
+ */
+export function emitNodeUpdate(node: Partial<NodeDTO> & { id: string }): void {
+  activeCollab?.emitNode({ type: "update", node });
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 2000; // .claude/rules/frontend.md: 저장 debounce ≈2s
@@ -41,6 +76,8 @@ interface CanvasState {
   trashedNodes: CanvasNode[];
 
   projectId: string | null;
+  /** GET canvas 응답의 project.name — LeftSidebar 헤더가 projectId 대신 이걸 표시한다. */
+  projectName: string | null;
   isLoading: boolean;
   isSaving: boolean;
   saveError: string | null;
@@ -58,6 +95,9 @@ interface CanvasState {
   onNodesChange: (changes: FlowNodeChange[]) => void;
   onEdgesChange: (changes: FlowEdgeChange[]) => void;
   onConnect: OnConnect;
+
+  /** 노드 리스트(LeftSidebar) 클릭 시 캔버스에서 해당 노드만 선택 상태로 — 순수 로컬 UI, emit 없음. */
+  selectNode: (id: string) => void;
 
   applyLocalAddNode: (position: XYPosition, type?: NodeType) => string;
   applyLocalUpdateNode: (id: string, patch: Partial<Pick<MarkdownNodeData, "title" | "markdown" | "type">>) => void;
@@ -78,7 +118,7 @@ interface CanvasState {
 
 const newId = () => crypto.randomUUID();
 
-function toNodeDTO(node: CanvasNode): NodeDTO {
+export function toNodeDTO(node: CanvasNode): NodeDTO {
   return {
     id: node.id,
     type: node.data.type,
@@ -98,11 +138,23 @@ export function fromNodeDTO(dto: NodeDTO): CanvasNode {
   };
 }
 
+// 휴지통 REST(TrashNode)는 markdown/position이 BE 계약 변경 요청 중이라 아직 없을 수 있다 —
+// 누락 시 빈 값으로 채워 휴지통 카드가 깨지지 않게만 한다(§CV-16).
+export function fromTrashNodeDTO(dto: TrashNode): CanvasNode {
+  return {
+    id: dto.id,
+    type: "markdown",
+    position: dto.position ?? { x: 0, y: 0 },
+    data: { title: dto.title, markdown: dto.markdown ?? "", type: dto.type, collapsed: true },
+  };
+}
+
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   nodes: [],
   edges: [],
   trashedNodes: [],
   projectId: null,
+  projectName: null,
   isLoading: false,
   isSaving: false,
   saveError: null,
@@ -115,11 +167,20 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       set({
         nodes: snapshot.nodes.map(fromNodeDTO),
         edges: snapshot.edges,
+        projectName: snapshot.project.name,
         isLoading: false,
       });
     } catch (err) {
       set({ isLoading: false });
       throw err;
+    }
+    // 휴지통은 새로고침 시 유실되던 문제(§CV-16) — REST에서 재조회해 복원한다.
+    // 캔버스 본문과 독립된 화면 영역이라 실패해도 캔버스 로딩 자체는 막지 않는다.
+    try {
+      const trash = await fetchTrash(projectId);
+      set({ trashedNodes: trash.nodes.map(fromTrashNodeDTO) });
+    } catch (err) {
+      console.warn("[canvas] 휴지통 목록 조회 실패:", err);
     }
   },
 
@@ -178,13 +239,28 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().applyLocalAddEdge(connection.source, connection.target);
   },
 
+  selectNode: (id) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => (n.selected === (n.id === id) ? n : { ...n, selected: n.id === id })),
+    }));
+  },
+
   applyLocalAddNode: (position, type = "idea") => {
     const id = newId();
+    const count = get().nodes.length;
+    // 매번 같은 좌표·이름으로 생성하면 연속 추가 시 노드가 그대로 겹친다 —
+    // 추가 순서에 따라 카드 한 칸씩 계단식으로 띄우고, 이름에 순번을 붙여 구분한다.
+    const STEP = 32;
+    const COLS = 6;
+    const cascadedPosition = {
+      x: position.x + (count % COLS) * STEP,
+      y: position.y + (count % COLS) * STEP,
+    };
     const node: CanvasNode = {
       id,
       type: "markdown",
-      position,
-      data: { title: "새 노드", markdown: "", type, collapsed: true },
+      position: cascadedPosition,
+      data: { title: `새 노드 ${count + 1}`, markdown: "", type, collapsed: true },
     };
     set((state) => ({ nodes: [...state.nodes, node] }));
     get().scheduleSave();

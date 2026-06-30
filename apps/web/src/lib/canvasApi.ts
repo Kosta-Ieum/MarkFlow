@@ -1,5 +1,5 @@
 // 캔버스 REST — apps/api/openapi.yaml `/projects/{projectId}/canvas`·`/nodes/...` 정본
-import type { EdgeDTO, NodeDTO, NodeType } from "@markflow/shared";
+import type { EdgeDTO, NodeDTO, NodeType, XY } from "@markflow/shared";
 
 import { api } from "./api";
 
@@ -38,10 +38,14 @@ export function saveCanvasSnapshot(
 
 // --- 휴지통 (§CV-16 — 노드 소프트삭제/복구/영구삭제) ---
 
+// markdown/position은 BE 계약 변경 요청 중(TrashNode 확장) — 추가 전 응답에서는 undefined일 수
+// 있어 옵셔널로 둔다. canvasStore의 fromTrashNodeDTO가 누락 시 빈 값으로 채워 화면이 깨지지 않게 한다.
 export interface TrashNode {
   id: string;
   title: string;
   type: NodeType;
+  markdown?: string;
+  position?: XY;
   deletedAt: string;
 }
 
