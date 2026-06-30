@@ -63,7 +63,7 @@
 | 기획자 / PM | 무한 캔버스에서 유저 플로우·기능 흐름 정리 |
 | 스터디 / 팀원 | 멀티커서·채팅으로 실시간 협업 |
 
-핵심 시나리오: 로그인 → 프로젝트 리스트에서 프로젝트 생성/선택 → 캔버스에서 마크다운 노드 작성·연결 → 멀티커서·채팅으로 협업 → 삭제 항목은 휴지통에서 복구.
+핵심 시나리오: 로그인 → 프로젝트 리스트에서 프로젝트 생성/선택 → 캔버스에서 마크다운 노드 작성·연결 → 멀티커서·채팅으로 협업 → 삭제한 노드는 휴지통에서 복구(프로젝트는 하드 삭제).
 
 ---
 
@@ -174,9 +174,9 @@ flowchart LR
 
 임시 저장소와 휴지통은 하나의 휴지통 개념으로 통합.
 
-- [ ] 삭제된 노드/프로젝트는 물리 삭제 대신 휴지통으로 이동한다 (소프트 삭제, deletedAt)
-- [ ] 휴지통 리스트가 아코디언 형식으로 펼쳐진다 (캔버스 노드 휴지통 + 프로젝트 휴지통 페이지)
-- [ ] 휴지통에서 항목을 복구할 수 있다 (deletedAt → null)
+- [ ] 삭제된 **노드**는 물리 삭제 대신 휴지통으로 이동한다 (소프트 삭제, deletedAt). **프로젝트는 하드 삭제**(복구 없음)
+- [ ] 노드 휴지통 리스트가 아코디언 형식으로 펼쳐진다 (캔버스 노드 휴지통)
+- [ ] 노드 휴지통에서 항목을 복구할 수 있다 (deletedAt → null)
 - [ ] 휴지통에서 항목을 영구 삭제할 수 있다 (물리 삭제, 복구 불가 — 확인 후)
 - [ ] 노드를 휴지통으로 보내면 연결된 엣지는 함께 제거된다 (복구 시 엣지는 복원되지 않음)
 
@@ -244,7 +244,7 @@ flowchart LR
 | 엔티티 | 핵심 필드(예시) | 비고 |
 | --- | --- | --- |
 | User | id, email, passwordHash, name | JWT 인증 |
-| Project | id, name, deletedAt | 프로젝트 = 캔버스 1:1, 소프트 삭제. 캔버스 본문은 Node/Edge로 정규화 |
+| Project | id, name | 프로젝트 = 캔버스 1:1, 하드 삭제(복구 없음). 캔버스 본문은 Node/Edge로 정규화 |
 | ProjectMember | projectId, userId, role | role = OWNER / EDITOR / VIEWER. 소유자(OWNER)는 프로젝트당 1명, 역할의 단일 소스 |
 | Node | id, projectId, title, markdown, type, collapsed, posX/posY, deletedAt | 타입(idea/doc/task/decision/data), 휴지통용 deletedAt |
 | Edge | id, projectId, sourceId, targetId | 노드 연결(중복·자기연결 금지) |

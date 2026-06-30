@@ -1,6 +1,6 @@
 // IEUM-20: 프로젝트 리스트 화면 (F2-1.4)
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { ProjectSummary, Role } from "@markflow/shared";
 import { ApiError } from "../../lib/api";
 import { canManage } from "../../lib/permissions";
@@ -192,9 +192,10 @@ function ProjectCard({ project, onManageMembers }: ProjectCardProps) {
                   onClick={(e) => void handleDeleteConfirm(e)}
                   disabled={del.isPending}
                   className="rounded px-1.5 py-0.5 text-xs font-medium text-error hover:bg-error-bg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-error disabled:opacity-50"
-                  aria-label="삭제 확인"
+                  aria-label="영구 삭제 확인"
+                  title="되돌릴 수 없습니다"
                 >
-                  삭제
+                  영구 삭제
                 </button>
                 <button
                   type="button"
@@ -211,7 +212,7 @@ function ProjectCard({ project, onManageMembers }: ProjectCardProps) {
                 onClick={handleDeleteClick}
                 className="rounded p-1 text-muted hover:bg-error-bg hover:text-error focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-error"
                 aria-label="프로젝트 삭제"
-                title="휴지통으로 이동"
+                title="프로젝트 영구 삭제 (복구 불가)"
               >
                 <TrashIcon />
               </button>
@@ -289,24 +290,6 @@ function TrashIcon() {
   );
 }
 
-function TrashLinkIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" />
-    </svg>
-  );
-}
-
 // ── 스켈레톤 ─────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -352,13 +335,6 @@ export function ProjectsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-4">
           <h2 className="font-display text-[30px] font-bold text-ink">프로젝트</h2>
-          <Link
-            to="/projects/trash"
-            className="inline-flex items-center gap-1 rounded-[10px] px-3 py-1.5 text-xs font-medium text-muted hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-          >
-            <TrashLinkIcon />
-            휴지통
-          </Link>
         </div>
 
         {/* 새 프로젝트 인라인 생성 폼 */}

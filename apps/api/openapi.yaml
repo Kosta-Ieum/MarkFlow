@@ -4,7 +4,7 @@ info:
   version: 1.1.0-draft
   description: 'MarkFlow — 마크다운 노드 기반 실시간 협업 캔버스 API 명세. REST는 이 문서가 기계 판독 정본이다. 실시간(멀티커서·노드
     동기화·소프트 락·채팅)은 Socket.io 직접 구현이 정본이며, 이벤트/페이로드 계약 정본은 packages/shared/src(SOCKET_EVENTS +
-    zod schema)다. v1.1은 ActivityLog, 프로젝트/노드 휴지통, 영구 삭제 엔드포인트를 반영한다.'
+    zod schema)다. v1.1은 ActivityLog, 노드 휴지통·영구 삭제 엔드포인트를 반영한다(프로젝트는 하드 삭제 — 휴지통 없음).'
 servers:
 - url: https://api.markflow.app/api
   description: Production example
@@ -249,33 +249,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /projects/trash:
-    get:
-      tags:
-      - Projects
-      summary: 삭제된 프로젝트 목록
-      description: 라우팅 시 /projects/:projectId 보다 먼저 등록해야 trash가 ID로 오인되지 않는다.
-      operationId: listDeletedProjects
-      security: *id001
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectsTrashResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
   /projects/{projectId}:
     patch:
       tags:
@@ -340,8 +313,8 @@ paths:
     delete:
       tags:
       - Projects
-      summary: 프로젝트 삭제 휴지통 이동
-      description: OWNER only. 소프트 삭제 및 ActivityLog(targetType=PROJECT, action=DELETE) 기록.
+      summary: 프로젝트 영구 삭제
+      description: OWNER only. 프로젝트를 물리 삭제한다(복구 불가). 하위 Node·Edge·ChatMessage·ActivityLog는 CASCADE로 함께 제거된다. 프로젝트 휴지통/복구는 없다(노드만 휴지통 적용).
       operationId: deleteProject
       security: *id001
       parameters:
@@ -367,94 +340,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NotFound
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /projects/{projectId}/restore:
-    post:
-      tags:
-      - Projects
-      summary: 프로젝트 복구
-      description: OWNER only. ActivityLog(targetType=PROJECT, action=RESTORE) 기록.
-      operationId: restoreProject
-      security: *id001
-      parameters:
-      - *id002
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectRestoreResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: NotFound
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /projects/{projectId}/permanent:
-    delete:
-      tags:
-      - Projects
-      summary: 프로젝트 영구 삭제
-      description: OWNER only. 소프트 삭제된 프로젝트만 물리 삭제한다. 하위 Node, Edge, ChatMessage, ActivityLog는 CASCADE로 함께 제거된다.
-      operationId: purgeProject
-      security: *id001
-      parameters:
-      - *id002
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PurgeResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: NotFound
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Unprocessable
           content:
             application/json:
               schema:
@@ -1569,48 +1454,12 @@ components:
       type: object
       required:
       - id
-      - deletedAt
+      - deleted
       properties:
         id: *id003
-        deletedAt: *id008
-    ProjectRestoreResponse:
-      type: object
-      required:
-      - id
-      - deletedAt
-      properties:
-        id: *id003
-        deletedAt:
-          type:
-          - string
-          - 'null'
-          format: date-time
-          example: null
-    DeletedProject:
-      type: object
-      required:
-      - id
-      - name
-      - deletedAt
-      - isOwner
-      properties:
-        id: *id003
-        name:
-          type: string
-          example: 블로그 초안
-        deletedAt: *id008
-        isOwner:
+        deleted:
           type: boolean
           example: true
-    ProjectsTrashResponse:
-      type: object
-      required:
-      - projects
-      properties:
-        projects:
-          type: array
-          items:
-            $ref: '#/components/schemas/DeletedProject'
     PurgeResponse:
       type: object
       required:

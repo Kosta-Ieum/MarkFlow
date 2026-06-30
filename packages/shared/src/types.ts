@@ -28,9 +28,6 @@ import {
   ProjectUpdateRequestSchema,
   ProjectUpdateResponseSchema,
   ProjectDeleteResponseSchema,
-  ProjectRestoreResponseSchema,
-  DeletedProjectSchema,
-  ProjectsTrashResponseSchema,
   PurgeResponseSchema,
   MemberSchema,
   MembersResponseSchema,
@@ -70,9 +67,6 @@ export type ProjectCreateRequest = z.infer<typeof ProjectCreateRequestSchema>;
 export type ProjectUpdateRequest = z.infer<typeof ProjectUpdateRequestSchema>;
 export type ProjectUpdateResponse = z.infer<typeof ProjectUpdateResponseSchema>;
 export type ProjectDeleteResponse = z.infer<typeof ProjectDeleteResponseSchema>;
-export type ProjectRestoreResponse = z.infer<typeof ProjectRestoreResponseSchema>;
-export type DeletedProject = z.infer<typeof DeletedProjectSchema>;
-export type ProjectsTrashResponse = z.infer<typeof ProjectsTrashResponseSchema>;
 export type PurgeResponse = z.infer<typeof PurgeResponseSchema>;
 
 // Member types

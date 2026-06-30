@@ -59,7 +59,6 @@ model Project {
   ownerId   String    @db.Uuid
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
 
   owner      User            @relation("ProjectOwner", fields: [ownerId], references: [id])
   members    ProjectMember[]
@@ -69,7 +68,6 @@ model Project {
   activities ActivityLog[]
 
   @@index([ownerId])
-  @@index([deletedAt])
 }
 
 model ProjectMember {

@@ -58,7 +58,7 @@ export function useRenameProject() {
   });
 }
 
-// ── 삭제 (소프트 — 휴지통 이동, OWNER) ──────────────────────────────────────
+// ── 삭제 (하드 — 영구 삭제·복구 없음, OWNER) ────────────────────────────────
 
 export function useDeleteProject() {
   const qc = useQueryClient();

@@ -55,15 +55,15 @@ test.describe("프로젝트 이름 변경", () => {
   });
 });
 
-test.describe("프로젝트 소프트 삭제(휴지통)", () => {
-  test.skip("OWNER가 휴지통 아이콘 클릭 후 '삭제' 확인 버튼 누르면 카드가 그리드에서 사라진다", async ({
+test.describe("프로젝트 영구 삭제", () => {
+  test.skip("OWNER가 삭제 아이콘 클릭 후 '영구 삭제' 확인 버튼 누르면 카드가 그리드에서 사라진다", async ({
     page,
   }) => {
     await loginAsSeedUser(page);
     const card = page.getByRole("article").first();
     await card.getByRole("button", { name: "프로젝트 삭제" }).click();
-    await card.getByRole("button", { name: "삭제 확인" }).click();
-    // 삭제 후 카드가 DOM에서 제거됨
+    await card.getByRole("button", { name: "영구 삭제 확인" }).click();
+    // 하드 삭제 후 카드가 DOM에서 제거됨(복구 없음)
     await expect(card).not.toBeVisible();
   });
 
@@ -74,63 +74,5 @@ test.describe("프로젝트 소프트 삭제(휴지통)", () => {
     await card.getByRole("button", { name: "프로젝트 삭제" }).click();
     await card.getByRole("button", { name: "취소" }).click();
     await expect(page.getByText(name)).toBeVisible();
-  });
-});
-
-test.describe("휴지통 — 복구 및 영구 삭제", () => {
-  test.skip("휴지통 링크 클릭 시 /projects/trash 로 이동한다", async ({ page }) => {
-    await loginAsSeedUser(page);
-    await page.getByRole("link", { name: "휴지통" }).click();
-    await expect(page).toHaveURL("/projects/trash");
-  });
-
-  test.skip("OWNER가 '복구' 버튼 클릭 시 카드가 휴지통에서 사라지고 /projects 에 재표시된다", async ({
-    page,
-  }) => {
-    await loginAsSeedUser(page);
-    await page.goto("/projects/trash");
-    const card = page.getByRole("article").first();
-    const name = await card.locator("h3").innerText();
-    await card.getByRole("button", { name: `${name} 복구` }).click();
-    await expect(card).not.toBeVisible();
-    await page.goto("/projects");
-    await expect(page.getByText(name)).toBeVisible();
-  });
-
-  test.skip("OWNER가 '영구 삭제' 버튼 → 확인 다이얼로그 → '영구 삭제' 클릭 시 카드가 사라지고 복구 불가 상태가 된다", async ({
-    page,
-  }) => {
-    await loginAsSeedUser(page);
-    await page.goto("/projects/trash");
-    const card = page.getByRole("article").first();
-    const name = await card.locator("h3").innerText();
-    await card.getByRole("button", { name: `${name} 영구 삭제` }).click();
-    // 확인 다이얼로그
-    const dialog = page.getByRole("dialog", { name: "프로젝트를 영구 삭제할까요?" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "영구 삭제" }).click();
-    await expect(card).not.toBeVisible();
-  });
-
-  test.skip("확인 다이얼로그에서 '취소' 클릭 시 카드가 그대로 남아 있다", async ({ page }) => {
-    await loginAsSeedUser(page);
-    await page.goto("/projects/trash");
-    const card = page.getByRole("article").first();
-    const name = await card.locator("h3").innerText();
-    await card.getByRole("button", { name: `${name} 영구 삭제` }).click();
-    const dialog = page.getByRole("dialog", { name: "프로젝트를 영구 삭제할까요?" });
-    await dialog.getByRole("button", { name: "취소" }).click();
-    await expect(dialog).not.toBeVisible();
-    await expect(page.getByText(name)).toBeVisible();
-  });
-
-  test.skip("OWNER가 아닌 멤버는 복구·영구 삭제 버튼이 비활성화되어 있다", async ({ page }) => {
-    // TODO(IEUM-42): VIEWER/EDITOR 시드 계정으로 교체 후 활성화
-    await loginAsSeedUser(page);
-    await page.goto("/projects/trash");
-    // 공유됨 배지가 있는 카드 탐색
-    const sharedCard = page.getByRole("article").filter({ hasText: "공유됨" }).first();
-    await expect(sharedCard.getByRole("button", { name: /복구/ })).toBeDisabled();
-    await expect(sharedCard.getByRole("button", { name: /영구 삭제/ })).toBeDisabled();
   });
 });
