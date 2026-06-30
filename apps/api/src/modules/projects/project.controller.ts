@@ -35,7 +35,8 @@ export class ProjectController {
   @Post()
   create(
     @CurrentUser() user: JwtPayload,
-    @Body(new ZodValidationPipe(ProjectCreateRequestSchema)) dto: ProjectCreateRequest,
+    @Body(new ZodValidationPipe(ProjectCreateRequestSchema))
+    dto: ProjectCreateRequest,
   ) {
     return this.projectService.create(user.sub, dto);
   }
@@ -46,7 +47,8 @@ export class ProjectController {
   update(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
-    @Body(new ZodValidationPipe(ProjectUpdateRequestSchema)) dto: ProjectUpdateRequest,
+    @Body(new ZodValidationPipe(ProjectUpdateRequestSchema))
+    dto: ProjectUpdateRequest,
   ) {
     return this.projectService.update(id, user.sub, dto);
   }
@@ -54,7 +56,10 @@ export class ProjectController {
   @Delete(":id")
   @UseGuards(ProjectRoleGuard)
   @RequireRole("OWNER")
-  remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
+  remove(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.projectService.delete(id, user.sub);
   }
 }
