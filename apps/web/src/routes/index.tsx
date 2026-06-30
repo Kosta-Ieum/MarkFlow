@@ -8,7 +8,6 @@ import { CanvasPage } from "../features/canvas";
 import { LandingPage } from "../features/landing";
 import { NodeEditorPage } from "../features/node-editor";
 import { ProjectsPage } from "../features/projects";
-import { TrashPage } from "../features/trash";
 import { useAuthStore } from "../store/authStore";
 
 interface ProtectedRouteProps {
@@ -35,14 +34,6 @@ export function AppRoutes() {
           element={
             <ProtectedRoute>
               <ProjectsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/projects/trash"
-          element={
-            <ProtectedRoute>
-              <TrashPage />
             </ProtectedRoute>
           }
         />

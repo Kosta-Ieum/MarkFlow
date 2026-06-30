@@ -49,6 +49,6 @@ export class ProjectController {
 
   @Delete(":id")
   remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload) {
-    return this.projectService.softDelete(id, user.sub);
+    return this.projectService.delete(id, user.sub);
   }
 }

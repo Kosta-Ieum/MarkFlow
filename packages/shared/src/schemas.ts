@@ -128,7 +128,8 @@ export const VerifyEmailResponseSchema = z.object({
   verified: z.boolean(),
 });
 
-// --- Projects (openapi components/schemas: ProjectSummary, ProjectsResponse, ProjectCreate/Update/Delete/Restore/Trash/Purge) ---
+// --- Projects (openapi: ProjectSummary, ProjectsResponse, ProjectCreate/Update/Delete) ---
+// 프로젝트는 하드 삭제 — 휴지통/복구 없음(노드만 소프트 삭제). PurgeResponse는 노드 영구삭제 공용.
 export const ProjectSummarySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -158,23 +159,7 @@ export const ProjectUpdateResponseSchema = z.object({
 
 export const ProjectDeleteResponseSchema = z.object({
   id: z.string().uuid(),
-  deletedAt: z.string().datetime(),
-});
-
-export const ProjectRestoreResponseSchema = z.object({
-  id: z.string().uuid(),
-  deletedAt: z.string().datetime().nullable(),
-});
-
-export const DeletedProjectSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string(),
-  deletedAt: z.string().datetime(),
-  isOwner: z.boolean(),
-});
-
-export const ProjectsTrashResponseSchema = z.object({
-  projects: z.array(DeletedProjectSchema),
+  deleted: z.boolean(),
 });
 
 export const PurgeResponseSchema = z.object({

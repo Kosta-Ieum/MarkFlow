@@ -57,7 +57,7 @@ VITE_MOCK_API=1
 ## 커버하는 엔드포인트
 
 - 인증: `POST /auth/signup`·`/auth/login`·`/auth/refresh`·`/auth/logout`, `GET /auth/me`
-- 프로젝트: `GET /projects`·`/projects/trash`, `POST /projects`, `PATCH /projects/:id`, `DELETE /projects/:id`·`/projects/:id/permanent`, `POST /projects/:id/restore`
+- 프로젝트: `GET /projects`, `POST /projects`, `PATCH /projects/:id`, `DELETE /projects/:id` (하드 삭제 — 휴지통/복구 없음)
 - 캔버스/노드: `GET /projects/:id/canvas`, `PATCH /projects/:id/nodes/:nodeId`
 - 채팅: `GET`·`POST /projects/:id/messages`
 - 히스토리: `GET /projects/:id/history`
