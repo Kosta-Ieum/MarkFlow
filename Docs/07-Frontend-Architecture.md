@@ -108,11 +108,10 @@ src/
     useLiveblocksCollab.ts # 차선(스텁)
   features/
     auth/               # 로그인·회원가입
-    projects/           # 프로젝트 리스트·휴지통
+    projects/           # 프로젝트 리스트 (삭제 = 하드 삭제, 휴지통 없음)
     canvas/             # React Flow, 커스텀 노드, 미니맵, 줌
     node-editor/        # 전체화면 MD 에디터
     panel/              # 우측 채팅·히스토리 탭, 채팅 FAB
-    trash/              # 휴지통 아코디언
   components/           # 공용 UI(헤더·버튼·모달)
   routes/               # 라우팅 + 인증 가드
   types/                # 노드 DTO 등 (백엔드와 공유 형태)

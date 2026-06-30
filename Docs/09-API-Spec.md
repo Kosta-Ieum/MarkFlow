@@ -10,7 +10,7 @@
 
 > **정본 안내** — REST API의 기계 판독 정본은 `apps/api/openapi.yaml`이다. Socket 이벤트·공용 DTO의 정본은 `packages/shared/src/`(`SOCKET_EVENTS` + zod schema)이다. 이 문서는 사람이 읽는 설명 문서이며, 계약 변경 시 정본 파일을 먼저 수정한다(절차 → `api-contract-change` 스킬).
 >
-> **Auth/Project DTO** — `User`, `SignupRequest`, `LoginRequest`, `AuthResponse`, `RefreshResponse`, `ProjectSummary`, `ProjectsResponse`, `ProjectCreateRequest`, `ProjectUpdateRequest`, `ProjectUpdateResponse`, `ProjectDeleteResponse`, `ProjectRestoreResponse`, `DeletedProject`, `ProjectsTrashResponse`, `PurgeResponse` 는 `@markflow/shared`(`packages/shared/src/schemas.ts`)에 zod 스키마로 제공된다. FE는 이 패키지에서 import하여 런타임 검증·타입 파생에 사용한다.
+> **Auth/Project DTO** — `User`, `SignupRequest`, `LoginRequest`, `AuthResponse`, `RefreshResponse`, `ProjectSummary`, `ProjectsResponse`, `ProjectCreateRequest`, `ProjectUpdateRequest`, `ProjectUpdateResponse`, `ProjectDeleteResponse`, `PurgeResponse`(노드 영구삭제 공용) 는 `@markflow/shared`(`packages/shared/src/schemas.ts`)에 zod 스키마로 제공된다. FE는 이 패키지에서 import하여 런타임 검증·타입 파생에 사용한다. (프로젝트는 하드 삭제 — 휴지통/복구 DTO 없음)
 >
 > 이 설명 문서는 ERD(`08-ERD.md`)와 PRD v1.2 / 화면설계서 v1.0을 **참고해 작성**한다(이 문서가 계약 정본은 아니다 — 위 정본 안내 참조). 인증은 JWT 자체 구현, 권한 가드는 **REST + 실시간 인증 양쪽 서버에서** 수행한다(PRD §6).
 
@@ -58,7 +58,7 @@
 | 프로젝트·노드·채팅 조회 | O | O | O |
 | 노드 생성·수정·이동·삭제·복원·영구삭제 | ✗ | O | O |
 | 채팅 메시지 작성 | ✗ | O | O |
-| 프로젝트 이름 변경·삭제·복구·영구삭제 | ✗ | ✗ | O |
+| 프로젝트 이름 변경·삭제(하드) | ✗ | ✗ | O |
 | 멤버 초대·권한 변경·제거 | ✗ | ✗ | O |
 
 > 모든 변경 엔드포인트는 `ProjectMember.role`을 서버에서 확인한다. 프론트 비활성화는 UX용일 뿐 진짜 가드가 아니다.
@@ -172,35 +172,12 @@
 - 권한: OWNER 외 `403`. (에디터·뷰어의 rename 입력은 서버에서 무시·거부)
 - 활동 로그 `ActivityLog(targetType=PROJECT, action=RENAME)` 기록 → 히스토리 탭 "프로젝트 제목 변경됨"(화면 `06-canvas-expanded`).
 
-### 2.4 프로젝트 삭제(휴지통) — OWNER only
+### 2.4 프로젝트 삭제 — OWNER only
 `DELETE /projects/:projectId`
 
-응답 `200` `{ "id": "uuid", "deletedAt": "..." }`
-- 소프트 삭제(`deletedAt` 설정). 물리 삭제 아님(PRD 결정 #7). 활동 로그 `(targetType=PROJECT, action=DELETE)` 기록.
-
-### 2.5 프로젝트 복구 — OWNER only
-`POST /projects/:projectId/restore`
-
-응답 `200` `{ "id": "uuid", "deletedAt": null }`
-- 활동 로그 `(targetType=PROJECT, action=RESTORE)` 기록.
-
-### 2.6 삭제된 프로젝트 목록 (휴지통 페이지) — 인증
-`GET /projects/trash`
-
-응답 `200`
-```json
-{ "projects": [ { "id": "uuid", "name": "블로그 초안", "deletedAt": "...", "isOwner": true } ] }
-```
-- 내가 소유한, `deletedAt IS NOT NULL`인 프로젝트 목록. 화면 `04-project-list`의 "삭제된 프로젝트는 휴지통 페이지에서 복구" 안내 반영.
-- 복구/영구삭제는 소유자만 가능하므로 본인 소유 항목만 반환.
-- ⚠️ 라우팅: 이 경로는 `:projectId` 파라미터 라우트(`/projects/:id/...`)보다 **먼저 등록**해야 `trash`가 id로 오인되지 않는다.
-
-### 2.7 프로젝트 영구 삭제(휴지통 비우기) — OWNER only
-`DELETE /projects/:projectId/permanent`
-
-- 소프트 삭제된(`deletedAt IS NOT NULL`) 프로젝트를 물리 삭제. 하위 **Node·Edge·ChatMessage·ActivityLog가 CASCADE로 함께 제거**된다.
-- 응답 `200` `{ "id": "uuid", "purged": true }`.
-- 활성 프로젝트(미삭제)에는 `422`(먼저 휴지통으로 이동해야 함). 비복구 동작이므로 클라이언트는 확인 모달 권장.
+응답 `200` `{ "id": "uuid", "deleted": true }`
+- **하드 삭제(복구 없음).** 프로젝트엔 휴지통/복구가 없다(소프트 삭제·휴지통은 노드 전용). 하위 **Node·Edge·ChatMessage·ActivityLog가 CASCADE로 함께 제거**된다.
+- 비복구 동작이므로 클라이언트는 확인 단계(모달/2단계 확인) 권장. 프로젝트가 사라지므로 프로젝트 단위 ActivityLog는 보존되지 않는다.
 
 ---
 
@@ -510,10 +487,7 @@ const socket = io(WS_URL, { auth: { token: accessToken } });
 | GET | `/projects` | 인증 | 내 프로젝트 목록 |
 | POST | `/projects` | 인증 | 프로젝트 생성 |
 | PATCH | `/projects/:id` | OWNER | 이름 변경 |
-| DELETE | `/projects/:id` | OWNER | 삭제(휴지통) |
-| POST | `/projects/:id/restore` | OWNER | 프로젝트 복구 |
-| GET | `/projects/trash` | 인증 | 삭제된 프로젝트 목록(휴지통 페이지) |
-| DELETE | `/projects/:id/permanent` | OWNER | 프로젝트 영구 삭제 |
+| DELETE | `/projects/:id` | OWNER | 삭제(하드, 복구 없음) |
 | GET | `/projects/:id/canvas` | 멤버 | 캔버스 스냅샷 |
 | PUT | `/projects/:id/canvas` | EDITOR+ | 일괄 저장 |
 | POST | `/projects/:id/nodes` | EDITOR+ | 노드 생성 |
@@ -523,7 +497,7 @@ const socket = io(WS_URL, { auth: { token: accessToken } });
 | DELETE | `/projects/:id/nodes/:nid/permanent` | EDITOR+ | 노드 영구 삭제 |
 | POST | `/projects/:id/edges` | EDITOR+ | 엣지 생성 |
 | DELETE | `/projects/:id/edges/:eid` | EDITOR+ | 엣지 삭제 |
-| GET | `/projects/:id/trash` | 멤버 | 휴지통 목록 |
+| GET | `/projects/:id/trash` | 멤버 | 노드 휴지통 목록 |
 | GET | `/projects/:id/messages` | 멤버 | 채팅 목록 |
 | POST | `/projects/:id/messages` | EDITOR+ | 채팅 작성 |
 | GET | `/projects/:id/nodes/:nid/history` | 멤버 | 노드 히스토리(activity, NODE 필터) |

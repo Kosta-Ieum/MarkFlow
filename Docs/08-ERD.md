@@ -21,7 +21,7 @@
 | 4 | 실시간 협업 포함 | Socket.io 직접 구현(정본). DB는 영속 스냅샷 소스, 실시간 상태와 분리 |
 | 5 | JWT 자체 구현 | `User.passwordHash`, JWT는 stateless(테이블 없음, 선택적 RefreshToken) |
 | 6 | 채팅 = 프로젝트 단위 | `ChatMessage.projectId` |
-| 7 | 임시저장소 + 휴지통 통합 | `deletedAt` 소프트 삭제 단일 메커니즘 + 영구 삭제(휴지통 비우기, 화면 `04-project-list/05-canvas-collapsed` 반영) |
+| 7 | 휴지통 = 노드 전용 | `Node.deletedAt` 소프트 삭제 + 복구(캔버스 휴지통, 화면 `05-canvas-collapsed`). **프로젝트는 하드 삭제**(복구 없음) |
 
 > **저장 전략 메모** — 기획서 초안의 "캔버스 JSONB 통째 저장"은 PRD의 정규화 결정으로 대체한다. 정규화 시 노드 단위 락·히스토리·복구가 자연스럽고, Socket.io 변경 이벤트 ↔ DB 영속화도 노드 row 단위로 매핑된다.
 
@@ -57,7 +57,6 @@ erDiagram
     uuid   ownerId FK
     datetime createdAt
     datetime updatedAt
-    datetime deletedAt "nullable, 휴지통"
   }
   ProjectMember {
     uuid   id PK
@@ -131,9 +130,9 @@ erDiagram
 | ownerId | UUID | FK→User.id, NOT NULL | 생성자(소유자). 역할 단일 소스는 ProjectMember이나, 빠른 조회·무결성용 비정규화 보관 |
 | createdAt | TIMESTAMPTZ | NOT NULL | |
 | updatedAt | TIMESTAMPTZ | NOT NULL | |
-| deletedAt | TIMESTAMPTZ | NULL | 휴지통(소프트 삭제). NULL = 활성 |
 
-- 인덱스: `INDEX(ownerId)`, `INDEX(deletedAt)`
+- 인덱스: `INDEX(ownerId)`
+- **삭제 = 하드 삭제(복구 없음)**: 프로젝트엔 `deletedAt`이 없다. 소프트 삭제·휴지통은 **Node에만** 적용. 프로젝트 삭제 시 하위 Node·Edge·ChatMessage·ActivityLog는 CASCADE로 함께 제거된다.
 - 프로젝트 생성 시 트랜잭션으로 `ProjectMember(role=OWNER)` row를 함께 생성한다. (프로젝트 = 캔버스 1:1, 별도 Canvas row 없음)
 - PRD 매핑: §4.3, §8 Project.
 
@@ -251,13 +250,12 @@ erDiagram
 
 ## 4. 소프트 삭제 / 휴지통 정책
 
-- `deletedAt`이 있는 엔티티: **Project, Node** (PRD 결정 #7 통합 휴지통).
-- 활성 조회는 항상 `WHERE deletedAt IS NULL`. Prisma 미들웨어 또는 명시 필터로 일관 적용.
-- 복구: `deletedAt = NULL`. 휴지통 리스트는 `WHERE deletedAt IS NOT NULL` (화면설계서 §4.4.5 아코디언).
-- 노드 삭제 시 연결 엣지는 물리 삭제(복구 대상 아님). 활동 로그에 `DELETE`/`RESTORE` 기록.
-- **영구 삭제(휴지통 비우기)** — 화면 `04-project-list`(프로젝트 컨텍스트 메뉴 "삭제" + 휴지통 페이지 복구 안내) 및 `05-canvas-collapsed`(캔버스 휴지통)에서 확인. 소프트 삭제된 항목을 휴지통에서 **물리 삭제(hard delete)** 할 수 있다:
-  - 프로젝트 영구 삭제 시 하위 Node·Edge·ChatMessage·ActivityLog가 CASCADE로 함께 제거된다(소유자만).
-  - 노드 영구 삭제 시 해당 노드와 잔여 관계가 제거된다. ActivityLog는 불변이므로 `targetId`(댕글링)와 함께 그대로 보존(감사 추적). 조회 시 폴백 라벨 처리(§2.7).
+- `deletedAt`이 있는 엔티티: **Node만** (휴지통은 캔버스 노드 전용).
+- **프로젝트는 휴지통 없음 — 하드 삭제**: `DELETE /projects/:projectId`는 즉시 물리 삭제(복구 없음, OWNER only). 하위 Node·Edge·ChatMessage·ActivityLog가 CASCADE로 함께 제거된다.
+- 노드 활성 조회는 항상 `WHERE deletedAt IS NULL`. Prisma 미들웨어 또는 명시 필터로 일관 적용.
+- 노드 복구: `deletedAt = NULL`. 노드 휴지통 리스트는 `WHERE deletedAt IS NOT NULL` (화면설계서 §4.4.5 아코디언).
+- 노드 소프트 삭제 시 연결 엣지는 물리 삭제(복구 대상 아님). 활동 로그에 `DELETE`/`RESTORE` 기록.
+- 노드 영구 삭제 시 해당 노드와 잔여 관계가 제거된다. ActivityLog는 불변이므로 `targetId`(댕글링)와 함께 그대로 보존(감사 추적). 조회 시 폴백 라벨 처리(§2.7).
 - 자동 보존 기간(예: 30일 후 자동 영구 삭제)은 범위 밖. 필요 시 배치로 추가.
 
 ---
@@ -326,7 +324,6 @@ model Project {
   ownerId   String   @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  deletedAt DateTime?
 
   owner      User            @relation("ProjectOwner", fields: [ownerId], references: [id])
   members    ProjectMember[]
@@ -336,7 +333,6 @@ model Project {
   activities ActivityLog[]
 
   @@index([ownerId])
-  @@index([deletedAt])
 }
 
 model ProjectMember {

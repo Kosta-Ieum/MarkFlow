@@ -20,7 +20,7 @@
 | 2 | **캔버스 저장 = Node/Edge 정규화** | 노드 단위 실시간 동기화·소프트락·휴지통·활동 로그. JSONB 통째 저장 폐기 |
 | 3 | **변경 이력 = ActivityLog(폴리모픽)** | 노드·엣지·프로젝트 이벤트를 한 타임라인에. 내용 복원/diff 없음 |
 | 4 | **인증 = JWT 자체 구현, 액세스 토큰만** | stateless. RefreshToken 미채택(향후 확장) |
-| 5 | **휴지통 = 소프트 삭제 + 영구 삭제** | deletedAt 통합 휴지통 + 물리 삭제(복구 불가) |
+| 5 | **휴지통 = 노드 전용 소프트 삭제** | `Node.deletedAt` 소프트삭제 + 복구. **프로젝트는 하드 삭제**(복구 없음) |
 | 6 | **백엔드 = 레이어드(서비스) 아키텍처** | 풀 클린 아키텍처 미채택. 로직≠전송, 서비스 seam |
 | 7 | **권한 = REST + Socket 양쪽 서버 가드** | OWNER/EDITOR/VIEWER 3단계, 프론트는 UX용 |
 
@@ -100,7 +100,7 @@ Controller / Gateway   →   Service   →   Prisma
 | 엔티티 | 역할 | 소프트삭제 |
 | --- | --- | --- |
 | User | 사용자(JWT) | — |
-| Project | 프로젝트(=캔버스 1:1) | deletedAt |
+| Project | 프로젝트(=캔버스 1:1) | — (하드 삭제) |
 | ProjectMember | 역할(OWNER/EDITOR/VIEWER), 역할 단일소스 | — |
 | Node | 마크다운 노드(type/collapsed/posX·posY) | deletedAt |
 | Edge | 노드 연결(중복·자기연결 금지) | — (물리삭제) |
@@ -119,7 +119,7 @@ Controller / Gateway   →   Service   →   Prisma
 
 - Base `/api`, `application/json`, `Authorization: Bearer <accessToken>`.
 - 표준 에러: `{ error: { code, message, details } }`. 코드: 400/401/403/404/409/422/500.
-- 주요 그룹: `/auth/*`, `/projects/*`(+trash/permanent), `/projects/:id/{canvas,nodes,edges,messages,history,members}`.
+- 주요 그룹: `/auth/*`, `/projects/*`, `/projects/:id/{canvas,nodes,edges,messages,history,members}`. (프로젝트 삭제는 하드 삭제 — 휴지통/복구 없음)
 - 페이지네이션: 채팅·히스토리는 커서 기반(`?limit&before`, `nextCursor`).
 
 ---
@@ -209,7 +209,7 @@ Controller / Gateway   →   Service   →   Prisma
 | --- | --- | --- |
 | **BE** | 백엔드 전체 | `prisma/`·`modules/*`·`shared/*`·`realtime/*` — Prisma·REST·서비스·권한 + Socket.io 게이트웨이·프레즌스·락·동기화 (소켓+도메인 통합) |
 | **FE-F1** | 캔버스/실시간 | React Flow, 노드 카드, `useCollaboration`, 멀티커서·락 UI, Zustand |
-| **FE-F2** | 셸/콘텐츠/패널 | 인증·프로젝트리스트, MD 상세 에디터, 채팅·히스토리·휴지통 UI, API 클라이언트 |
+| **FE-F2** | 셸/콘텐츠/패널 | 인증·프로젝트리스트, MD 상세 에디터, 채팅·히스토리 UI, API 클라이언트 |
 
 > Day 1 계약: ① Prisma 스키마 ② `assertPermission` ③ 서비스 시그니처 ④ DTO·CollabAPI 인터페이스. 이 4개가 BE↔FE 분배의 접합면이다. **BE가 단독 크리티컬 패스**이므로 1주차에 계약을 최우선 제공한다.
 

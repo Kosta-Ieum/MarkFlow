@@ -285,7 +285,7 @@ flowchart LR
 | 엣지 연결 | Edge (sourceId, targetId) |
 | 팀 채팅 | ChatMessage (projectId, userId, content) |
 | 히스토리 탭 | ActivityLog (projectId, userId, targetType, targetId, action) |
-| 휴지통 | Node/Project의 deletedAt |
+| 휴지통 | Node의 deletedAt (프로젝트는 하드 삭제 — 휴지통 없음) |
 
 ---
 
