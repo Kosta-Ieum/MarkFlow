@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import * as bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs";
+
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { AppException } from "../../common/app.exception.js";
 import type { JwtPayload } from "../../common/guards/jwt-auth.guard.js";
@@ -38,10 +39,16 @@ export class AuthService {
       where: { email: dto.email },
       select: { id: true, email: true, name: true, passwordHash: true },
     });
-    if (!user) throw AppException.unauthorized("이메일 또는 비밀번호가 올바르지 않습니다");
+    if (!user)
+      throw AppException.unauthorized(
+        "이메일 또는 비밀번호가 올바르지 않습니다",
+      );
 
     const match = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!match) throw AppException.unauthorized("이메일 또는 비밀번호가 올바르지 않습니다");
+    if (!match)
+      throw AppException.unauthorized(
+        "이메일 또는 비밀번호가 올바르지 않습니다",
+      );
 
     const { passwordHash: _, ...safeUser } = user;
     return { accessToken: this.sign(safeUser), user: safeUser };
