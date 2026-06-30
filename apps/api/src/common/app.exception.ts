@@ -36,4 +36,8 @@ export class AppException extends HttpException {
   static conflict(message: string) {
     return new AppException("CONFLICT", HttpStatus.CONFLICT, message);
   }
+
+  static unprocessable(message: string) {
+    return new AppException("UNPROCESSABLE", HttpStatus.UNPROCESSABLE_ENTITY, message);
+  }
 }

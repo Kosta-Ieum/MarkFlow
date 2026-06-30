@@ -1,2 +1,220 @@
-// NodeService (@Injectable) — REST·WS 공용 seam — 노드 서비스
-// TODO: 구현
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../prisma/prisma.service.js";
+import { assertPermission } from "../../shared/permission.js";
+import { AppException } from "../../common/app.exception.js";
+import type { NodeDTO, PurgeResponse } from "@markflow/shared";
+import type {
+  NodeCreateRequest,
+  NodeUpdateRequest,
+  NodeDeleteResponse,
+  NodeRestoreResponse,
+} from "./node.dto.js";
+
+interface NodeRow {
+  id: string;
+  type: string;
+  title: string;
+  markdown: string;
+  collapsed: boolean;
+  posX: number;
+  posY: number;
+  updatedAt: Date;
+}
+
+function toNodeDTO(node: NodeRow): NodeDTO {
+  return {
+    id: node.id,
+    type: node.type as NodeDTO["type"],
+    title: node.title,
+    markdown: node.markdown,
+    collapsed: node.collapsed,
+    position: { x: node.posX, y: node.posY },
+    updatedAt: node.updatedAt.toISOString(),
+  };
+}
+
+@Injectable()
+export class NodeService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(
+    projectId: string,
+    userId: string,
+    dto: NodeCreateRequest,
+  ): Promise<NodeDTO> {
+    await assertPermission(this.prisma, projectId, userId, "EDITOR");
+
+    const node = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.node.create({
+        data: {
+          projectId,
+          title: dto.title,
+          markdown: dto.markdown,
+          type: dto.type,
+          posX: dto.position.x,
+          posY: dto.position.y,
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          projectId,
+          userId,
+          targetType: "NODE",
+          targetId: created.id,
+          action: "CREATE",
+        },
+      });
+
+      return created;
+    });
+
+    return toNodeDTO(node);
+  }
+
+  async update(
+    projectId: string,
+    userId: string,
+    nodeId: string,
+    dto: NodeUpdateRequest,
+  ): Promise<NodeDTO> {
+    await assertPermission(this.prisma, projectId, userId, "EDITOR");
+
+    const existing = await this.prisma.node.findFirst({
+      where: { id: nodeId, projectId, deletedAt: null },
+    });
+    if (!existing) throw AppException.notFound("노드를 찾을 수 없습니다");
+
+    const changedKeys = Object.keys(dto) as (keyof NodeUpdateRequest)[];
+    if (changedKeys.length === 0) {
+      return toNodeDTO(existing);
+    }
+
+    const isMoveOnly =
+      changedKeys.length === 1 && changedKeys[0] === "position";
+    const action = isMoveOnly ? "MOVE" : "UPDATE";
+
+    const node = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.node.update({
+        where: { id: nodeId },
+        data: {
+          ...(dto.title !== undefined && { title: dto.title }),
+          ...(dto.markdown !== undefined && { markdown: dto.markdown }),
+          ...(dto.type !== undefined && { type: dto.type }),
+          ...(dto.collapsed !== undefined && { collapsed: dto.collapsed }),
+          ...(dto.position !== undefined && {
+            posX: dto.position.x,
+            posY: dto.position.y,
+          }),
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          projectId,
+          userId,
+          targetType: "NODE",
+          targetId: nodeId,
+          action,
+        },
+      });
+
+      return updated;
+    });
+
+    return toNodeDTO(node);
+  }
+
+  async softDelete(
+    projectId: string,
+    userId: string,
+    nodeId: string,
+  ): Promise<NodeDeleteResponse> {
+    await assertPermission(this.prisma, projectId, userId, "EDITOR");
+
+    const existing = await this.prisma.node.findFirst({
+      where: { id: nodeId, projectId, deletedAt: null },
+    });
+    if (!existing) throw AppException.notFound("노드를 찾을 수 없습니다");
+
+    const node = await this.prisma.$transaction(async (tx) => {
+      await tx.edge.deleteMany({
+        where: { OR: [{ sourceId: nodeId }, { targetId: nodeId }] },
+      });
+
+      const updated = await tx.node.update({
+        where: { id: nodeId },
+        data: { deletedAt: new Date() },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          projectId,
+          userId,
+          targetType: "NODE",
+          targetId: nodeId,
+          action: "DELETE",
+        },
+      });
+
+      return updated;
+    });
+
+    return { id: node.id, deletedAt: node.deletedAt!.toISOString() };
+  }
+
+  async restore(
+    projectId: string,
+    userId: string,
+    nodeId: string,
+  ): Promise<NodeRestoreResponse> {
+    await assertPermission(this.prisma, projectId, userId, "EDITOR");
+
+    const existing = await this.prisma.node.findFirst({
+      where: { id: nodeId, projectId, deletedAt: { not: null } },
+    });
+    if (!existing) throw AppException.notFound("삭제된 노드를 찾을 수 없습니다");
+
+    const node = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.node.update({
+        where: { id: nodeId },
+        data: { deletedAt: null },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          projectId,
+          userId,
+          targetType: "NODE",
+          targetId: nodeId,
+          action: "RESTORE",
+        },
+      });
+
+      return updated;
+    });
+
+    return { id: node.id, deletedAt: node.deletedAt?.toISOString() ?? null };
+  }
+
+  async purge(
+    projectId: string,
+    userId: string,
+    nodeId: string,
+  ): Promise<PurgeResponse> {
+    await assertPermission(this.prisma, projectId, userId, "EDITOR");
+
+    const existing = await this.prisma.node.findFirst({
+      where: { id: nodeId, projectId },
+    });
+    if (!existing) throw AppException.notFound("노드를 찾을 수 없습니다");
+    if (!existing.deletedAt) {
+      throw AppException.unprocessable("소프트 삭제된 노드만 영구 삭제할 수 있습니다");
+    }
+
+    // ActivityLog는 불변 보존 — targetId 댕글링 허용, 과거 로그는 지우지 않는다.
+    await this.prisma.node.delete({ where: { id: nodeId } });
+
+    return { id: nodeId, purged: true };
+  }
+}
