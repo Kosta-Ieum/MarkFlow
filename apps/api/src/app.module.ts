@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
 import { ProjectModule } from "./modules/projects/project.module.js";
+import { NodeModule } from "./modules/nodes/node.module.js";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
 
 @Module({
@@ -17,7 +18,8 @@ import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
     }),
     AuthModule,
     ProjectModule,
-    // 도메인 모듈(nodes·edges·members·chat·activity·realtime)은
+    NodeModule,
+    // 도메인 모듈(edges·members·chat·activity·realtime)은
     // 구현 시 여기에 등록한다.
   ],
   providers: [
