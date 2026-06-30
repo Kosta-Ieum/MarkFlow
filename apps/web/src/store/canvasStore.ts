@@ -7,7 +7,13 @@ import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import type { Edge, EdgeChange, Node, NodeChange, OnConnect, XYPosition } from "@xyflow/react";
 import type { NodeDTO, NodeType } from "@markflow/shared";
 
-import { fetchCanvas, saveCanvasSnapshot } from "../lib/canvasApi";
+import { deleteNode as deleteNodeApi, fetchCanvas, purgeNode as purgeNodeApi, restoreNode as restoreNodeApi, saveCanvasSnapshot } from "../lib/canvasApi";
+
+// BE 노드 REST(IEUM-24)가 아직 스텁이라 호출이 실패할 수 있다 — 화면은 항상 로컬
+// 낙관적 업데이트를 먼저 반영하고, REST는 "되면 되는" fire-and-forget으로 보낸다.
+function fireAndForget(promise: Promise<unknown>) {
+  promise.catch((err) => console.warn("[canvas] 서버 동기화 실패(BE 구현 전이면 정상):", err));
+}
 
 const AUTOSAVE_DEBOUNCE_MS = 2000; // .claude/rules/frontend.md: 저장 debounce ≈2s
 
@@ -48,6 +54,8 @@ interface CanvasState {
   applyLocalToggleCollapse: (id: string) => void;
   applyLocalDeleteNode: (id: string) => void;
   applyLocalRestoreNode: (id: string) => void;
+  /** 영구삭제(물리 삭제) — §CV-16 */
+  applyLocalPermanentDeleteNode: (id: string) => void;
   applyLocalAddEdge: (source: string, target: string) => void;
   applyLocalDeleteEdge: (id: string) => void;
 
@@ -173,7 +181,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   // 소프트 삭제 + 연결된 엣지 물리 삭제 (§CV-08 — 복구 시 엣지는 미복원 §CV-16)
+  // DELETE /nodes/:id가 서버에서 엣지 정리까지 같이 하므로 bulk 저장(scheduleSave)은 안 탄다.
   applyLocalDeleteNode: (id) => {
+    const { projectId } = get();
     set((state) => {
       const target = state.nodes.find((n) => n.id === id);
       if (!target) return state;
@@ -183,10 +193,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         trashedNodes: [...state.trashedNodes, target],
       };
     });
-    get().scheduleSave();
+    if (projectId) fireAndForget(deleteNodeApi(projectId, id));
   },
 
   applyLocalRestoreNode: (id) => {
+    const { projectId } = get();
     set((state) => {
       const target = state.trashedNodes.find((n) => n.id === id);
       if (!target) return state;
@@ -195,7 +206,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         nodes: [...state.nodes, target],
       };
     });
-    get().scheduleSave();
+    if (projectId) fireAndForget(restoreNodeApi(projectId, id));
+  },
+
+  applyLocalPermanentDeleteNode: (id) => {
+    const { projectId } = get();
+    set((state) => ({ trashedNodes: state.trashedNodes.filter((n) => n.id !== id) }));
+    if (projectId) fireAndForget(purgeNodeApi(projectId, id));
   },
 
   applyLocalAddEdge: (source, target) => {

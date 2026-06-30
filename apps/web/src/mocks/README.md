@@ -58,7 +58,8 @@ VITE_MOCK_API=1
 
 - 인증: `POST /auth/signup`·`/auth/login`·`/auth/refresh`·`/auth/logout`, `GET /auth/me`
 - 프로젝트: `GET /projects`·`/projects/trash`, `POST /projects`, `PATCH /projects/:id`, `DELETE /projects/:id`·`/projects/:id/permanent`, `POST /projects/:id/restore`
-- 캔버스/노드: `GET /projects/:id/canvas`, `PATCH /projects/:id/nodes/:nodeId`
+- 캔버스/노드: `GET`·`PUT /projects/:id/canvas`, `PATCH /projects/:id/nodes/:nodeId`
+- 노드 휴지통(§CV-16): `DELETE /projects/:id/nodes/:nodeId`, `POST .../restore`, `DELETE .../permanent`, `GET /projects/:id/trash`
 - 채팅: `GET`·`POST /projects/:id/messages`
 - 히스토리: `GET /projects/:id/history`
 

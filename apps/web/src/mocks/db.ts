@@ -55,6 +55,8 @@ interface ProjectRecord {
   deletedAt: string | null;
   nodes: NodeDTO[];
   edges: EdgeDTO[];
+  /** 소프트 삭제된 노드 — §CV-16 휴지통. NodeDTO + deletedAt. */
+  trashedNodes: (NodeDTO & { deletedAt: string })[];
   messages: ChatMessageDTO[];
   history: ActivityDTO[];
 }
@@ -221,6 +223,7 @@ function buildProject(
     deletedAt: null,
     nodes,
     edges: seedEdges(nodes),
+    trashedNodes: [],
     messages: seedMessages(),
     history: seedHistory(nodes),
   };
@@ -237,6 +240,7 @@ function buildTrashProject(id: string, name: string): ProjectRecord {
     deletedAt: isoMinutesAgo(300),
     nodes,
     edges: seedEdges(nodes),
+    trashedNodes: [],
     messages: [],
     history: [],
   };
@@ -357,6 +361,7 @@ export function createProject(name: string): ProjectRecord {
     deletedAt: null,
     nodes: [],
     edges: [],
+    trashedNodes: [],
     messages: [],
     history: [
       {
@@ -442,6 +447,70 @@ export function updateNode(
     action: onlyPosition ? "MOVE" : "UPDATE",
   });
   return node;
+}
+
+/** 캔버스 일괄 저장(§CV-17/18) — nodes/edges 전체 교체. trashedNodes는 별도 관리. */
+export function replaceCanvas(
+  projectId: string,
+  nodes: NodeDTO[],
+  edges: EdgeDTO[],
+): ProjectRecord | undefined {
+  const p = findProject(projectId);
+  if (!p) return undefined;
+  p.nodes = nodes;
+  p.edges = edges;
+  p.updatedAt = isoNow();
+  return p;
+}
+
+// 소프트 삭제 + 연결된 엣지 물리 삭제 (§CV-08 — 복구 시 엣지는 미복원 §CV-16)
+export function softDeleteNode(
+  projectId: string,
+  nodeId: string,
+): { id: string; deletedAt: string } | undefined {
+  const p = findProject(projectId);
+  if (!p) return undefined;
+  const idx = p.nodes.findIndex((n) => n.id === nodeId);
+  if (idx === -1) return undefined;
+  const [node] = p.nodes.splice(idx, 1);
+  const deletedAt = isoNow();
+  p.trashedNodes.push({ ...node, deletedAt });
+  p.edges = p.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
+  p.updatedAt = deletedAt;
+  prependActivity(p, { targetType: "NODE", targetId: node.id, targetLabel: node.title, action: "DELETE" });
+  return { id: nodeId, deletedAt };
+}
+
+export function restoreNode(
+  projectId: string,
+  nodeId: string,
+): { id: string; deletedAt: null } | undefined {
+  const p = findProject(projectId);
+  if (!p) return undefined;
+  const idx = p.trashedNodes.findIndex((n) => n.id === nodeId);
+  if (idx === -1) return undefined;
+  const [{ deletedAt: _deletedAt, ...node }] = p.trashedNodes.splice(idx, 1);
+  p.nodes.push(node);
+  p.updatedAt = isoNow();
+  prependActivity(p, { targetType: "NODE", targetId: node.id, targetLabel: node.title, action: "RESTORE" });
+  return { id: nodeId, deletedAt: null };
+}
+
+export function purgeNode(projectId: string, nodeId: string): { id: string; purged: boolean } | undefined {
+  const p = findProject(projectId);
+  if (!p) return undefined;
+  const idx = p.trashedNodes.findIndex((n) => n.id === nodeId);
+  if (idx === -1) return { id: nodeId, purged: false };
+  p.trashedNodes.splice(idx, 1);
+  return { id: nodeId, purged: true };
+}
+
+export function listTrashedNodes(
+  projectId: string,
+): { id: string; title: string; type: NodeDTO["type"]; deletedAt: string }[] | undefined {
+  const p = findProject(projectId);
+  if (!p) return undefined;
+  return p.trashedNodes.map((n) => ({ id: n.id, title: n.title, type: n.type, deletedAt: n.deletedAt }));
 }
 
 export function addMessage(projectId: string, content: string): ChatMessageDTO | undefined {
