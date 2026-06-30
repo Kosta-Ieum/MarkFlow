@@ -7,10 +7,9 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UseGuards,
 } from "@nestjs/common";
 import { ProjectService } from "./project.service.js";
-import { JwtAuthGuard, type JwtPayload } from "../../common/guards/jwt-auth.guard.js";
+import type { JwtPayload } from "../../common/guards/jwt-auth.guard.js";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe.js";
 import {
@@ -20,8 +19,8 @@ import {
   type ProjectUpdateRequest,
 } from "@markflow/shared";
 
+// 전역 JwtAuthGuard가 기본 보호 (app.module.ts APP_GUARD)
 @Controller("projects")
-@UseGuards(JwtAuthGuard)
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
