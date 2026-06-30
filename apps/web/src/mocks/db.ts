@@ -4,7 +4,6 @@
 import type {
   User,
   ProjectSummary,
-  DeletedProject,
   NodeDTO,
   EdgeDTO,
   ChatMessageDTO,
@@ -42,7 +41,6 @@ const DEMO_USER_ID = uuid();
 const PROJECT_ROADMAP_ID = uuid();
 const PROJECT_BLOG_ID = uuid();
 const PROJECT_RESEARCH_ID = uuid();
-const TRASH_PROJECT_ID = uuid();
 
 // ── store 타입 ───────────────────────────────────────────────────────────────
 
@@ -52,7 +50,6 @@ interface ProjectRecord {
   role: Role;
   isOwner: boolean;
   updatedAt: string;
-  deletedAt: string | null;
   nodes: NodeDTO[];
   edges: EdgeDTO[];
   messages: ChatMessageDTO[];
@@ -218,27 +215,10 @@ function buildProject(
     role,
     isOwner: role === "OWNER",
     updatedAt: isoMinutesAgo(updatedMinutesAgo),
-    deletedAt: null,
     nodes,
     edges: seedEdges(nodes),
     messages: seedMessages(),
     history: seedHistory(nodes),
-  };
-}
-
-function buildTrashProject(id: string, name: string): ProjectRecord {
-  const nodes = seedNodes();
-  return {
-    id,
-    name,
-    role: "OWNER",
-    isOwner: true,
-    updatedAt: isoMinutesAgo(600),
-    deletedAt: isoMinutesAgo(300),
-    nodes,
-    edges: seedEdges(nodes),
-    messages: [],
-    history: [],
   };
 }
 
@@ -296,14 +276,11 @@ export const db: MockDb = {
     buildProject(PROJECT_ROADMAP_ID, "제품 로드맵", "OWNER", 5),
     buildProject(PROJECT_BLOG_ID, "블로그 초안", "EDITOR", 30),
     buildProject(PROJECT_RESEARCH_ID, "리서치 보드", "VIEWER", 180),
-    // 휴지통 1개
-    buildTrashProject(TRASH_PROJECT_ID, "지난 분기 회고"),
   ],
   members: {
     [PROJECT_ROADMAP_ID]: seedMembers("OWNER"),
     [PROJECT_BLOG_ID]: seedMembers("EDITOR"),
     [PROJECT_RESEARCH_ID]: seedMembers("VIEWER"),
-    [TRASH_PROJECT_ID]: seedMembers("OWNER"),
   },
 };
 
@@ -314,11 +291,7 @@ export function findProject(id: string): ProjectRecord | undefined {
 }
 
 export function activeProjects(): ProjectRecord[] {
-  return db.projects.filter((p) => p.deletedAt === null);
-}
-
-export function trashedProjects(): ProjectRecord[] {
-  return db.projects.filter((p) => p.deletedAt !== null);
+  return db.projects;
 }
 
 // ── 매핑(record → 응답 DTO) ──────────────────────────────────────────────────
@@ -334,16 +307,6 @@ export function toProjectSummary(p: ProjectRecord): ProjectSummary {
   };
 }
 
-export function toDeletedProject(p: ProjectRecord): DeletedProject {
-  return {
-    id: p.id,
-    name: p.name,
-    // deletedAt !== null 인 record에만 호출됨
-    deletedAt: p.deletedAt ?? isoNow(),
-    isOwner: p.isOwner,
-  };
-}
-
 // ── 변이(런타임 CRUD가 상태에 반영) ──────────────────────────────────────────
 
 export function createProject(name: string): ProjectRecord {
@@ -354,7 +317,6 @@ export function createProject(name: string): ProjectRecord {
     role: "OWNER",
     isOwner: true,
     updatedAt: isoNow(),
-    deletedAt: null,
     nodes: [],
     edges: [],
     messages: [],
@@ -374,25 +336,12 @@ export function createProject(name: string): ProjectRecord {
   return record;
 }
 
-export function softDeleteProject(id: string): ProjectRecord | undefined {
-  const p = findProject(id);
-  if (!p) return undefined;
-  p.deletedAt = isoNow();
-  return p;
-}
-
-export function restoreProject(id: string): ProjectRecord | undefined {
-  const p = findProject(id);
-  if (!p) return undefined;
-  p.deletedAt = null;
-  p.updatedAt = isoNow();
-  return p;
-}
-
-export function purgeProject(id: string): ProjectRecord | undefined {
+export function deleteProject(id: string): ProjectRecord | undefined {
+  // 하드 삭제 — db에서 영구 제거(복구 없음). 멤버 목록도 함께 제거.
   const idx = db.projects.findIndex((p) => p.id === id);
   if (idx === -1) return undefined;
   const [removed] = db.projects.splice(idx, 1);
+  delete db.members[id];
   return removed;
 }
 

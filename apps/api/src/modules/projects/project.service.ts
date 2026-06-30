@@ -16,7 +16,7 @@ export class ProjectService {
 
   async list(userId: string): Promise<ProjectsResponse> {
     const memberships = await this.prisma.projectMember.findMany({
-      where: { userId, project: { deletedAt: null } },
+      where: { userId },
       include: {
         project: {
           select: {
@@ -73,7 +73,7 @@ export class ProjectService {
     await assertPermission(this.prisma, projectId, userId, "OWNER");
 
     const project = await this.prisma.project.update({
-      where: { id: projectId, deletedAt: null },
+      where: { id: projectId },
       data: { name: dto.name },
       select: { id: true, name: true, updatedAt: true },
     });
@@ -85,23 +85,17 @@ export class ProjectService {
     };
   }
 
-  async softDelete(projectId: string, userId: string): Promise<ProjectDeleteResponse> {
+  async delete(projectId: string, userId: string): Promise<ProjectDeleteResponse> {
     await assertPermission(this.prisma, projectId, userId, "OWNER");
 
-    const project = await this.prisma.project.findFirst({
-      where: { id: projectId, deletedAt: null },
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
     });
     if (!project) throw AppException.notFound("프로젝트를 찾을 수 없습니다");
 
-    const updated = await this.prisma.project.update({
-      where: { id: projectId },
-      data: { deletedAt: new Date() },
-      select: { id: true, deletedAt: true },
-    });
+    // 하드 삭제 — 복구 없음. 하위 Node·Edge·ChatMessage·ActivityLog는 onDelete: Cascade로 함께 제거된다.
+    await this.prisma.project.delete({ where: { id: projectId } });
 
-    return {
-      id: updated.id,
-      deletedAt: updated.deletedAt!.toISOString(),
-    };
+    return { id: projectId, deleted: true };
   }
 }

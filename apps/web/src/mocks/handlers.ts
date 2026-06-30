@@ -10,9 +10,6 @@ import type {
   ProjectSummary,
   ProjectUpdateResponse,
   ProjectDeleteResponse,
-  ProjectRestoreResponse,
-  ProjectsTrashResponse,
-  PurgeResponse,
   CanvasSnapshot,
   NodeDTO,
   ChatMessageDTO,
@@ -30,13 +27,9 @@ import {
   db,
   findProject,
   activeProjects,
-  trashedProjects,
   toProjectSummary,
-  toDeletedProject,
   createProject,
-  softDeleteProject,
-  restoreProject,
-  purgeProject,
+  deleteProject,
   renameProject,
   updateNode,
   addMessage,
@@ -153,13 +146,6 @@ export const handlers = [
   }),
 
   // ── Projects ─────────────────────────────────────────────────────────────
-  // /projects/trash 는 /projects/:id 보다 먼저 등록(ID 오인 방지).
-  http.get(url("/projects/trash"), async () => {
-    await delay(LATENCY_MS);
-    const res: ProjectsTrashResponse = { projects: trashedProjects().map(toDeletedProject) };
-    return HttpResponse.json(res, { status: 200 });
-  }),
-
   http.get(url("/projects"), async () => {
     await delay(LATENCY_MS);
     const res: ProjectsResponse = { projects: activeProjects().map(toProjectSummary) };
@@ -189,27 +175,12 @@ export const handlers = [
     return HttpResponse.json(res, { status: 200 });
   }),
 
-  http.delete(url("/projects/:projectId/permanent"), async ({ params }) => {
-    await delay(LATENCY_MS);
-    const removed = purgeProject(params.projectId as string);
-    if (!removed) return notFound("프로젝트를 찾을 수 없습니다.");
-    const res: PurgeResponse = { id: removed.id, purged: true };
-    return HttpResponse.json(res, { status: 200 });
-  }),
-
-  http.post(url("/projects/:projectId/restore"), async ({ params }) => {
-    await delay(LATENCY_MS);
-    const record = restoreProject(params.projectId as string);
-    if (!record) return notFound("프로젝트를 찾을 수 없습니다.");
-    const res: ProjectRestoreResponse = { id: record.id, deletedAt: record.deletedAt };
-    return HttpResponse.json(res, { status: 200 });
-  }),
-
   http.delete(url("/projects/:projectId"), async ({ params }) => {
     await delay(LATENCY_MS);
-    const record = softDeleteProject(params.projectId as string);
-    if (!record || record.deletedAt === null) return notFound("프로젝트를 찾을 수 없습니다.");
-    const res: ProjectDeleteResponse = { id: record.id, deletedAt: record.deletedAt };
+    // 하드 삭제 — 휴지통/복구 없음. db에서 영구 제거.
+    const removed = deleteProject(params.projectId as string);
+    if (!removed) return notFound("프로젝트를 찾을 수 없습니다.");
+    const res: ProjectDeleteResponse = { id: removed.id, deleted: true };
     return HttpResponse.json(res, { status: 200 });
   }),
 
