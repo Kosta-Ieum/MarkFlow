@@ -1,13 +1,23 @@
 // React Flow 캔버스 화면 — IEUM-21 [F1-1.1] 스캐폴드 + IEUM-22 [F1-1.2] 노드 카드
 // + IEUM-23 [F1-1.3] Zustand 캔버스 스토어 + IEUM-27 [F1-2.1] 캔버스↔DB 연동·자동저장
-// + IEUM-28 [F1-2.2] 휴지통 드래그드롭. 실시간 동기화(소켓)는 IEUM-34에서 연결된다.
+// + IEUM-28 [F1-2.2] 휴지통 드래그드롭 + IEUM-34 [F1-3.1] 실시간 소켓 연결(연결만 — 멀티커서
+// UI 렌더링은 IEUM-35).
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import {
+  Background,
+  BackgroundVariant,
+  MiniMap,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+} from "@xyflow/react";
 import type { Node as FlowNode, OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { useCanvasStore } from "../../store/canvasStore";
+import { useCollaboration } from "../../collab/useCollaboration";
+import type { CollabAPI } from "../../collab/CollabAPI";
+import { setActiveCollab, useCanvasStore } from "../../store/canvasStore";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
 import { MarkdownNodeCard } from "./MarkdownNodeCard";
@@ -28,10 +38,12 @@ function isPointInRect(x: number, y: number, rect: DOMRect): boolean {
 }
 
 function CanvasSurface({
+  collab,
   leftSidebarExpanded,
   rightPanelExpanded,
   rightPanelOffset,
 }: {
+  collab: CollabAPI;
   leftSidebarExpanded: boolean;
   rightPanelExpanded: boolean;
   rightPanelOffset: number;
@@ -44,6 +56,7 @@ function CanvasSurface({
   const isSaving = useCanvasStore((s) => s.isSaving);
   const saveError = useCanvasStore((s) => s.saveError);
   const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
+  const { screenToFlowPosition } = useReactFlow();
 
   const trashRef = useRef<HTMLDivElement>(null);
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
@@ -70,8 +83,15 @@ function CanvasSurface({
     setIsDragOverTrash(false);
   };
 
+  // 멀티커서 렌더링(IEUM-35) 전이라도 emit 배선은 여기서 끝내둔다 — 커서 throttle(≈50ms)은
+  // useSocketCollab 안에서 처리하므로 여기선 그냥 매 mousemove마다 호출해도 된다.
+  const handlePointerMove = (e: React.MouseEvent) => {
+    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    collab.emitCursor(flowPos);
+  };
+
   return (
-    <div className="relative h-full flex-1">
+    <div className="relative h-full flex-1" onPointerMove={handlePointerMove}>
       <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
         {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
       </div>
@@ -108,6 +128,7 @@ export function CanvasPage() {
 
   const nodes = useCanvasStore((s) => s.nodes);
   const applyLocalAddNode = useCanvasStore((s) => s.applyLocalAddNode);
+  const collab = useCollaboration(projectId);
 
   useEffect(() => {
     if (!projectId) return;
@@ -118,6 +139,18 @@ export function CanvasPage() {
         useCanvasStore.setState({ nodes: seedNodes, edges: seedEdges, isLoading: false });
       }
     });
+  }, [projectId]);
+
+  // 소켓 연결 생명주기 — canvasStore의 applyLocal*가 emit할 수 있도록 활성 인스턴스로 등록.
+  useEffect(() => {
+    if (!projectId) return;
+    collab.connect(projectId);
+    setActiveCollab(collab);
+    return () => {
+      setActiveCollab(null);
+      collab.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const handleAddNode = () => {
@@ -135,6 +168,7 @@ export function CanvasPage() {
           nodeCount={nodes.length}
         />
         <CanvasSurface
+          collab={collab}
           leftSidebarExpanded={leftExpanded}
           rightPanelExpanded={rightExpanded}
           rightPanelOffset={372}

@@ -1,18 +1,26 @@
-// nodes·edges (applyLocal/applyRemote) — IEUM-23 [F1-1.3] 로컬 CRUD
+// nodes·edges (applyLocal/applyRemote) — IEUM-23 [F1-1.3] 로컬 CRUD + IEUM-34 [F1-3.1] 실시간 emit
 // 단일 진실원(.claude/rules/frontend.md): React Flow·노드카드는 이 store만 구독/호출한다.
-// applyLocal*  = 내 동작 (이후 IEUM-34에서 emit 지점이 됨, 지금은 emit 없음)
-// applyRemote* = 원격 수신 적용 전용 (재emit 금지) — 호출자는 IEUM-34 소켓 핸들러
+// applyLocal*  = 내 동작 — 로컬 반영 + activeCollab으로 emit (echo 루프 방지: 내가 보낸 것만 emit)
+// applyRemote* = 원격 수신 적용 전용 (재emit 금지) — 호출자는 collab/useSocketCollab.ts
 import { create } from "zustand";
 import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
-import type { Edge, EdgeChange, Node, NodeChange, OnConnect, XYPosition } from "@xyflow/react";
-import type { NodeDTO, NodeType } from "@markflow/shared";
+import type { Edge, EdgeChange as FlowEdgeChange, Node, NodeChange as FlowNodeChange, OnConnect, XYPosition } from "@xyflow/react";
+import type { EdgeDTO, NodeDTO, NodeType } from "@markflow/shared";
 
 import { deleteNode as deleteNodeApi, fetchCanvas, purgeNode as purgeNodeApi, restoreNode as restoreNodeApi, saveCanvasSnapshot } from "../lib/canvasApi";
+import type { CollabAPI } from "../collab/CollabAPI";
 
 // BE 노드 REST(IEUM-24)가 아직 스텁이라 호출이 실패할 수 있다 — 화면은 항상 로컬
 // 낙관적 업데이트를 먼저 반영하고, REST는 "되면 되는" fire-and-forget으로 보낸다.
 function fireAndForget(promise: Promise<unknown>) {
   promise.catch((err) => console.warn("[canvas] 서버 동기화 실패(BE 구현 전이면 정상):", err));
+}
+
+// 현재 연결된 CollabAPI 인스턴스 — store는 React 훅을 직접 못 쓰므로 CanvasPage가
+// useCollaboration()을 호출한 뒤 이 함수로 등록/해제한다(연결 안 됐으면 emit은 그냥 no-op).
+let activeCollab: CollabAPI | null = null;
+export function setActiveCollab(collab: CollabAPI | null): void {
+  activeCollab = collab;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 2000; // .claude/rules/frontend.md: 저장 debounce ≈2s
@@ -42,11 +50,13 @@ interface CanvasState {
   loadCanvas: (projectId: string) => Promise<void>;
   saveCanvas: () => Promise<void>;
   scheduleSave: () => void;
+  /** sync:init/sync:resync 수신 시 캔버스 전체를 원격 스냅샷으로 교체(재emit 금지) */
+  applyRemoteSnapshot: (nodes: NodeDTO[], edges: EdgeDTO[]) => void;
 
   // React Flow 이벤트 바인딩 — 로컬 선택/드래그만 처리. 삭제(remove)는 무시하고
   // applyLocalDeleteNode를 통해서만 소프트 삭제한다(하드 삭제 경로 차단).
-  onNodesChange: (changes: NodeChange[]) => void;
-  onEdgesChange: (changes: EdgeChange[]) => void;
+  onNodesChange: (changes: FlowNodeChange[]) => void;
+  onEdgesChange: (changes: FlowEdgeChange[]) => void;
   onConnect: OnConnect;
 
   applyLocalAddNode: (position: XYPosition, type?: NodeType) => string;
@@ -79,7 +89,7 @@ function toNodeDTO(node: CanvasNode): NodeDTO {
   };
 }
 
-function fromNodeDTO(dto: NodeDTO): CanvasNode {
+export function fromNodeDTO(dto: NodeDTO): CanvasNode {
   return {
     id: dto.id,
     type: "markdown",
@@ -135,10 +145,27 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ saveTimer: timer });
   },
 
+  applyRemoteSnapshot: (nodes, edges) => {
+    set({ nodes: nodes.map(fromNodeDTO), edges });
+  },
+
   onNodesChange: (changes) => {
     const nonRemove = changes.filter((c) => c.type !== "remove");
     set((state) => ({ nodes: applyNodeChanges(nonRemove, state.nodes) as CanvasNode[] }));
     get().scheduleSave();
+
+    // 드래그 완료(커밋) 시점의 최종 위치만 실시간 전파 — 매 프레임 emit하면
+    // 네트워크가 막히고 드롭 후 잔상이 생긴다(과거 프로토타입에서 겪은 문제).
+    const committed = changes.filter(
+      (c): c is FlowNodeChange & { type: "position"; id: string; dragging: false } =>
+        c.type === "position" && c.dragging === false,
+    );
+    if (committed.length === 0 || !activeCollab) return;
+    const nodesById = new Map(get().nodes.map((n) => [n.id, n]));
+    for (const c of committed) {
+      const node = nodesById.get(c.id);
+      if (node) activeCollab.emitNode({ type: "update", node: { id: node.id, position: node.position } });
+    }
   },
 
   onEdgesChange: (changes) => {
@@ -161,6 +188,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     };
     set((state) => ({ nodes: [...state.nodes, node] }));
     get().scheduleSave();
+    activeCollab?.emitNode({ type: "add", node: toNodeDTO(node) });
     return id;
   },
 
@@ -169,15 +197,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: state.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
     }));
     get().scheduleSave();
+    activeCollab?.emitNode({ type: "update", node: { id, ...patch } });
   },
 
   applyLocalToggleCollapse: (id) => {
+    let nextCollapsed: boolean | undefined;
     set((state) => ({
-      nodes: state.nodes.map((n) =>
-        n.id === id ? { ...n, data: { ...n.data, collapsed: !n.data.collapsed } } : n,
-      ),
+      nodes: state.nodes.map((n) => {
+        if (n.id !== id) return n;
+        nextCollapsed = !n.data.collapsed;
+        return { ...n, data: { ...n.data, collapsed: nextCollapsed } };
+      }),
     }));
     get().scheduleSave();
+    if (nextCollapsed !== undefined) {
+      activeCollab?.emitNode({ type: "update", node: { id, collapsed: nextCollapsed } });
+    }
   },
 
   // 소프트 삭제 + 연결된 엣지 물리 삭제 (§CV-08 — 복구 시 엣지는 미복원 §CV-16)
@@ -194,19 +229,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       };
     });
     if (projectId) fireAndForget(deleteNodeApi(projectId, id));
+    activeCollab?.emitNode({ type: "delete", nodeId: id });
   },
 
   applyLocalRestoreNode: (id) => {
     const { projectId } = get();
+    let restored: CanvasNode | undefined;
     set((state) => {
       const target = state.trashedNodes.find((n) => n.id === id);
       if (!target) return state;
+      restored = target;
       return {
         trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
         nodes: [...state.nodes, target],
       };
     });
     if (projectId) fireAndForget(restoreNodeApi(projectId, id));
+    if (restored) activeCollab?.emitNode({ type: "add", node: toNodeDTO(restored) });
   },
 
   applyLocalPermanentDeleteNode: (id) => {
@@ -219,11 +258,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const edge: Edge = { id: newId(), source, target };
     set((state) => ({ edges: [...state.edges, edge] }));
     get().scheduleSave();
+    activeCollab?.emitEdge({ type: "add", edge });
   },
 
   applyLocalDeleteEdge: (id) => {
     set((state) => ({ edges: state.edges.filter((e) => e.id !== id) }));
     get().scheduleSave();
+    activeCollab?.emitEdge({ type: "delete", edgeId: id });
   },
 
   // --- 원격 수신 적용 (재emit 금지) ---
