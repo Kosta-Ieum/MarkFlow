@@ -1,16 +1,20 @@
-// 커스텀 마크다운 노드 카드 — IEUM-22 [F1-1.2]
+// 커스텀 마크다운 노드 카드 — IEUM-22 [F1-1.2] + IEUM-35 [F1-3.2] 소프트 락 UI
 // 화면설계서 §4.4.2: 186px 라운드 카드, 타입 도트+라벨+제목+접기/펼치기.
 // 접힘: 제목 + 첫 비제목 라인 26자 truncate. 펼침: 마크다운 렌더 본문.
-// 실제 데이터 영속화(Zustand 스토어 연동)는 IEUM-23, 전체화면 에디터는 별도 페이지 티켓 범위.
+// §4.4 소프트 락 명세: 타인이 편집 중이면 잠금 아이콘+"OO 편집 중" 배지, 본인은 진입 차단(읽기 전용).
 import { memo } from "react";
 
 import type { MouseEvent } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { useNavigate, useParams } from "react-router-dom";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import type { NodeType } from "@markflow/shared";
 
-import { useCanvasStore, type MarkdownNodeData } from "../../store/canvasStore";
+import { getUserColor } from "../../lib/userColor";
+import { useAuthStore } from "../../store/authStore";
+import { requestNodeLock, useCanvasStore, type MarkdownNodeData } from "../../store/canvasStore";
+import { usePresenceStore } from "../../store/presenceStore";
 
 export type { MarkdownNodeData };
 
@@ -42,17 +46,42 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
   const toggleCollapse = useCanvasStore((s) => s.applyLocalToggleCollapse);
   const style = TYPE_STYLES[type];
 
+  const { projectId = "" } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
+  const myId = useAuthStore((s) => s.user?.id);
+  const lockedBy = usePresenceStore((s) => s.locks[id]);
+  const lockerName = usePresenceStore((s) =>
+    lockedBy ? s.onlineUsers.find((u) => u.id === lockedBy)?.name : undefined,
+  );
+  const lockedByOther = !!lockedBy && lockedBy !== myId;
+
   const handleToggle = (e: MouseEvent) => {
     e.stopPropagation();
     toggleCollapse(id);
   };
 
+  const handleEnterEdit = () => {
+    if (lockedByOther) return; // §4.4 소프트 락: 타인 편집 중이면 진입 차단(읽기 전용)
+    requestNodeLock(id); // 편집 세션 시작 — 해제는 캔버스 이탈 시 소켓 연결 종료로 처리(서버 측 정책)
+    navigate(`/p/${projectId}/n/${id}`);
+  };
+
   return (
     <div
-      className={`w-[186px] rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
+      className={`relative w-[186px] rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
         selected ? `ring-[3px] ${style.ring}` : ""
-      }`}
+      } ${lockedByOther ? "opacity-80" : ""}`}
+      onDoubleClick={handleEnterEdit}
     >
+      {lockedByOther && (
+        <div
+          className="absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+          style={{ backgroundColor: getUserColor(lockedBy) }}
+        >
+          🔒 {lockerName ?? "다른 사용자"} 편집 중
+        </div>
+      )}
+
       <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-2 !border-white !bg-edge" />
 
       <div className={`flex items-center gap-1.5 rounded-t-xl px-3 py-2 ${style.header}`}>

@@ -1,7 +1,7 @@
 // 토큰·user — 인증 store (라우트 가드 토대 + API 연동)
 import type { AuthResponse, User } from "@markflow/shared";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 import { api } from "../lib/api";
 
@@ -73,6 +73,13 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "markflow-auth",
+      // localStorage는 같은 브라우저의 모든 탭이 공유한다 — 실서버 환경에선 의도된 동작(한 번
+      // 로그인하면 새 탭도 같은 세션)이지만, mock 모드(VITE_MOCK_API=1)에서 두 탭에 서로 다른
+      // 계정을 띄워 멀티유저를 테스트할 때는 새로고침마다 세션이 서로 덮어써서 꼬인다.
+      // mock 모드에서만 탭별로 격리되는 sessionStorage를 쓴다.
+      storage: createJSONStorage(() =>
+        import.meta.env.VITE_MOCK_API === "1" ? sessionStorage : localStorage,
+      ),
       partialize: (state) => ({ token: state.token, user: state.user }),
       onRehydrateStorage: () => (state) => {
         if (state) {

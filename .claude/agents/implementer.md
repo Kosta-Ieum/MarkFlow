@@ -29,4 +29,4 @@ During implementation:
 
 Before finishing:
 - Run `./scripts/check`.
-- Return: 변경 파일 · 테스트 결과 · 위험(호환성/마이그레이션/보안) · 미검증 가정.
+- Return: 작업 요약 / 주요 변경 사항 / 상세 작업 내용 / 테스트 결과 / 리뷰어에게 전달할 말

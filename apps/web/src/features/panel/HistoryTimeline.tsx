@@ -2,10 +2,12 @@
 // 화면설계서 §4.4.6: 세로 타임라인 = 컬러 도트 + 연결선 + 이벤트 텍스트 + 모노 시각
 // 전송 은닉: api() + useQuery만. fetch/socket 직접 호출 금지.
 import { useQuery } from "@tanstack/react-query";
+import { useReactFlow } from "@xyflow/react";
 import type { ActivityDTO, ActivityAction, ActivityTarget } from "@markflow/shared";
 
 import { api } from "../../lib/api";
 import { queryKeys } from "../../lib/queryKeys";
+import { useCanvasStore } from "../../store/canvasStore";
 
 // ── 응답 envelope (openapi HistoryResponse) ──────────────────────────────────
 
@@ -108,6 +110,18 @@ function ActivityItem({ activity, isLast }: ActivityItemProps) {
   const actionLabel = ACTION_LABEL[activity.action] ?? activity.action;
   const { relative, absolute } = formatTime(activity.createdAt);
 
+  const selectNode = useCanvasStore((s) => s.selectNode);
+  const nodeExists = useCanvasStore((s) => !!activity.targetId && s.nodes.some((n) => n.id === activity.targetId));
+  const { fitView } = useReactFlow();
+  // 현재 캔버스에 살아있는 노드일 때만 클릭 가능 — 삭제된 노드는 잡을 대상이 없다.
+  const clickable = activity.targetType === "NODE" && nodeExists;
+
+  const handleClick = () => {
+    if (!clickable || !activity.targetId) return;
+    selectNode(activity.targetId);
+    void fitView({ nodes: [{ id: activity.targetId }], duration: 300, maxZoom: 1.2 });
+  };
+
   return (
     <li className="relative flex gap-3">
       {/* 세로 연결선 + 도트 */}
@@ -122,7 +136,21 @@ function ActivityItem({ activity, isLast }: ActivityItemProps) {
       </div>
 
       {/* 텍스트 블록 */}
-      <div className={`pb-4 ${isLast ? "pb-0" : ""} min-w-0`}>
+      <div
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onClick={clickable ? handleClick : undefined}
+        onKeyDown={
+          clickable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") handleClick();
+              }
+            : undefined
+        }
+        className={`min-w-0 ${isLast ? "pb-0" : "pb-4"} ${
+          clickable ? "-mx-1 cursor-pointer rounded-md px-1 hover:bg-canvas" : ""
+        }`}
+      >
         <p className="text-sm leading-snug text-ink">
           <span className="font-medium">{activity.user.name}</span>
           {"님이 "}

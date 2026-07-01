@@ -1,10 +1,10 @@
 // IEUM-37 [F2-3.2] 채팅 스레드 공용 표현 컴포넌트.
 // ChatPanel(우측 패널)·ChatFab(FAB 팝오버) 양쪽에서 재사용한다(§3.3 "같은 상태").
-// 전송 은닉: useCollaboration(projectId).sendChat만. fetch/socket 직접 호출 금지.
+// 전송 은닉: canvasStore의 sendChatMessage(내부적으로 activeCollab.sendChat)만. fetch/socket 직접 호출 금지.
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessageDTO } from "@markflow/shared";
 
-import { useCollaboration } from "../../collab/useCollaboration";
+import { sendChatMessage } from "../../store/canvasStore";
 import { useChatStore } from "../../store/chatStore";
 import { usePresenceStore } from "../../store/presenceStore";
 
@@ -111,25 +111,24 @@ function MessageList({ currentUserId }: { currentUserId: string | null }) {
 
 // ── 입력창 ────────────────────────────────────────────────────────────────────
 
-function MessageComposer({ projectId }: { projectId: string }) {
+function MessageComposer() {
   const [value, setValue] = useState("");
-  const collab = useCollaboration(projectId);
 
   function submit() {
     const content = value.trim();
     if (!content) return;
-    collab.sendChat(content);
+    sendChatMessage(content);
     setValue("");
   }
 
   return (
     <div className="border-t border-line p-3">
       <div className="flex items-end gap-2">
-        <label htmlFor={`chat-composer-${projectId}`} className="sr-only">
+        <label htmlFor="chat-composer-input" className="sr-only">
           메시지 입력
         </label>
         <textarea
-          id={`chat-composer-${projectId}`}
+          id="chat-composer-input"
           rows={1}
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -162,12 +161,14 @@ export interface ChatThreadProps {
   currentUserId: string | null;
 }
 
-export function ChatThread({ projectId, currentUserId }: ChatThreadProps) {
+// projectId는 sendChatMessage가 store의 activeCollab(이미 해당 프로젝트 룸에 연결됨)을
+// 통해서만 보내므로 더 필요 없다 — 호출부(ChatFab/ChatPanel) 시그니처 안정성 위해 prop은 유지.
+export function ChatThread({ currentUserId }: ChatThreadProps) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <PresenceSection />
       <MessageList currentUserId={currentUserId} />
-      <MessageComposer projectId={projectId} />
+      <MessageComposer />
     </div>
   );
 }
