@@ -5,6 +5,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components";
 import { AuthPage } from "../features/auth";
 import { CanvasPage } from "../features/canvas";
+import { ProjectCollabLayout } from "../features/canvas/ProjectCollabLayout";
 import { LandingPage } from "../features/landing";
 import { NodeEditorPage } from "../features/node-editor";
 import { ProjectsPage } from "../features/projects";
@@ -41,18 +42,13 @@ export function AppRoutes() {
           path="/p/:projectId"
           element={
             <ProtectedRoute>
-              <CanvasPage />
+              <ProjectCollabLayout />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="/p/:projectId/n/:nodeId"
-          element={
-            <ProtectedRoute>
-              <NodeEditorPage />
-            </ProtectedRoute>
-          }
-        />
+        >
+          <Route index element={<CanvasPage />} />
+          <Route path="n/:nodeId" element={<NodeEditorPage />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

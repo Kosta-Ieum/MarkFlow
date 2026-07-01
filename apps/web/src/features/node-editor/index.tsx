@@ -5,6 +5,9 @@ import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import type { NodeType } from "@markflow/shared";
 import { canEdit } from "../../lib/permissions";
+import { requestNodeLock } from "../../store/canvasStore";
+import { useAuthStore } from "../../store/authStore";
+import { usePresenceStore } from "../../store/presenceStore";
 import { ChatFab } from "../panel/ChatFab";
 import { useCanvasSnapshot, useNode, useSaveNode } from "./useNodeEditor";
 
@@ -97,8 +100,25 @@ export function NodeEditorPage() {
   const { mutateAsync: saveNode } = useSaveNode(projectId, nodeId);
 
   const role = snapshot?.project.role;
-  // role 미확정(로딩 중)이면 읽기 전용으로 방어. canEdit는 OWNER|EDITOR.
-  const isReadOnly = role === undefined || !canEdit(role);
+  const myId = useAuthStore((s) => s.user?.id);
+  const lockedBy = usePresenceStore((s) => s.locks[nodeId]);
+  const lockerName = usePresenceStore((s) =>
+    lockedBy ? s.onlineUsers.find((u) => u.id === lockedBy)?.name : undefined,
+  );
+  const lockedByOther = !!lockedBy && lockedBy !== myId;
+  // role 미확정(로딩 중)이거나 다른 사람이 이 노드를 락 중이면 읽기 전용으로 방어.
+  // canEdit는 OWNER|EDITOR. — 캔버스 카드 더블클릭 가드(handleEnterEdit)는 진입 전
+  // 소프트 체크일 뿐이라, 직접 URL 진입·동시 더블클릭 같은 race를 못 막는다. 여기가
+  // 실제 진입점이니 이 안에서 다시 체크하고, 진입 가능하면 락을 직접 acquire한다.
+  const isReadOnly = role === undefined || !canEdit(role) || lockedByOther;
+
+  useEffect(() => {
+    // 다른 사람이 이미 들고 있거나, 애초에 편집 권한이 없으면(VIEWER) 락을 잡지 않는다.
+    if (lockedByOther || role === undefined || !canEdit(role)) return;
+    requestNodeLock(nodeId);
+    return () => requestNodeLock(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId, lockedByOther, role]);
 
   // 로컬 편집 상태
   const [title, setTitle] = useState("");
@@ -284,7 +304,7 @@ export function NodeEditorPage() {
           )}
           {isReadOnly && (
             <span className="rounded-full bg-line px-2 py-0.5 font-mono text-xs text-muted">
-              읽기 전용
+              {lockedByOther ? `🔒 ${lockerName ?? "다른 사용자"} 편집 중 — 읽기 전용` : "읽기 전용"}
             </span>
           )}
         </div>

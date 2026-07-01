@@ -37,6 +37,11 @@ secrets/
 apps/api/prisma/generated/
 *.db
 *.db-journal
+# F1 로컬 dev DB 셋업용으로 생성됨 — BE 역할 범위라 커밋 안 함(F1이 직접 만든 임시 마이그레이션)
+apps/api/prisma/migrations/
+
+# ───────── 작업 인계 메모(세션 간 전달용, 커밋 대상 아님) ─────────
+HANDOFF.md
 
 # ───────── 개인 학습 노트 ─────────
 apps/api/practice/

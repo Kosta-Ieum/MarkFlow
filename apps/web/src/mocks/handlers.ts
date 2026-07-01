@@ -12,6 +12,7 @@ import type {
   ProjectDeleteResponse,
   CanvasSnapshot,
   NodeDTO,
+  EdgeDTO,
   ChatMessageDTO,
   ActivityDTO,
   ErrorResponse,
@@ -32,6 +33,11 @@ import {
   deleteProject,
   renameProject,
   updateNode,
+  replaceCanvas,
+  softDeleteNode,
+  restoreNode,
+  purgeNode,
+  listTrashedNodes,
   addMessage,
   loginAs,
   issueToken,
@@ -41,6 +47,7 @@ import {
   inviteMember,
   updateMemberRole,
   removeMember,
+  roleOf,
 } from "./db";
 
 // api()의 BASE와 동일해야 핸들러가 매칭된다.
@@ -122,6 +129,10 @@ export const handlers = [
     const body = (await request.json().catch(() => ({}))) as Partial<{ email: string }>;
     if (!body.email) return badRequest("email이 필요합니다.");
     const code = generateCode(body.email);
+    // 실제 메일 전송이 없으므로 콘솔에 노출(개발 편의). UI는 SendCodeResponse 계약만 보고
+    // devCode 필드는 안 쓴다 — F2 화면 로직 변경 없이 콘솔로만 확인 가능하게 함.
+    // eslint-disable-next-line no-console
+    console.info(`[MSW] ${body.email} 인증코드: ${code}`);
     // devCode는 dev/mock 전용 편의 필드(실서버 SendCodeResponse엔 없음 — shared 계약).
     const res: SendCodeResponse & { devCode?: string } = { sent: true, devCode: code };
     return HttpResponse.json(res, { status: 200 });
@@ -190,7 +201,7 @@ export const handlers = [
     const record = findProject(params.projectId as string);
     if (!record) return notFound("프로젝트를 찾을 수 없습니다.");
     const res: CanvasSnapshot = {
-      project: { id: record.id, name: record.name, role: record.role },
+      project: { id: record.id, name: record.name, role: roleOf(record.id, db.user.email) },
       nodes: record.nodes,
       edges: record.edges,
     };
@@ -205,6 +216,43 @@ export const handlers = [
     const node = updateNode(params.projectId as string, params.nodeId as string, patch);
     if (!node) return notFound("노드를 찾을 수 없습니다.");
     return HttpResponse.json(node, { status: 200 });
+  }),
+
+  http.put(url("/projects/:projectId/canvas"), async ({ params, request }) => {
+    await delay(LATENCY_MS);
+    const body = (await request.json().catch(() => ({}))) as { nodes?: NodeDTO[]; edges?: EdgeDTO[] };
+    const record = replaceCanvas(params.projectId as string, body.nodes ?? [], body.edges ?? []);
+    if (!record) return notFound("프로젝트를 찾을 수 없습니다.");
+    return HttpResponse.json({ savedAt: record.updatedAt }, { status: 200 });
+  }),
+
+  // ── 노드 휴지통 (§CV-16) ──────────────────────────────────────────────────
+  http.delete(url("/projects/:projectId/nodes/:nodeId"), async ({ params }) => {
+    await delay(LATENCY_MS);
+    const res = softDeleteNode(params.projectId as string, params.nodeId as string);
+    if (!res) return notFound("노드를 찾을 수 없습니다.");
+    return HttpResponse.json(res, { status: 200 });
+  }),
+
+  http.post(url("/projects/:projectId/nodes/:nodeId/restore"), async ({ params }) => {
+    await delay(LATENCY_MS);
+    const res = restoreNode(params.projectId as string, params.nodeId as string);
+    if (!res) return notFound("휴지통에서 노드를 찾을 수 없습니다.");
+    return HttpResponse.json(res, { status: 200 });
+  }),
+
+  http.delete(url("/projects/:projectId/nodes/:nodeId/permanent"), async ({ params }) => {
+    await delay(LATENCY_MS);
+    const res = purgeNode(params.projectId as string, params.nodeId as string);
+    if (!res) return notFound("프로젝트를 찾을 수 없습니다.");
+    return HttpResponse.json(res, { status: 200 });
+  }),
+
+  http.get(url("/projects/:projectId/trash"), async ({ params }) => {
+    await delay(LATENCY_MS);
+    const nodes = listTrashedNodes(params.projectId as string);
+    if (!nodes) return notFound("프로젝트를 찾을 수 없습니다.");
+    return HttpResponse.json({ nodes }, { status: 200 });
   }),
 
   // ── Chat ─────────────────────────────────────────────────────────────────
