@@ -4,6 +4,17 @@ import { assertPermission } from "../../shared/permission.js";
 import { AppException } from "../../common/app.exception.js";
 import type { CanvasSnapshot, NodeDTO } from "@markflow/shared";
 
+export interface TrashNode {
+  id: string;
+  title: string;
+  type: string;
+  deletedAt: string;
+}
+
+export interface ProjectTrashResponse {
+  nodes: TrashNode[];
+}
+
 function toNodeDTO(node: {
   id: string;
   type: string;
@@ -28,6 +39,25 @@ function toNodeDTO(node: {
 @Injectable()
 export class CanvasService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getTrash(projectId: string, userId: string): Promise<ProjectTrashResponse> {
+    await assertPermission(this.prisma, projectId, userId, "VIEWER");
+
+    const nodes = await this.prisma.node.findMany({
+      where: { projectId, deletedAt: { not: null } },
+      select: { id: true, title: true, type: true, deletedAt: true },
+      orderBy: { deletedAt: "desc" },
+    });
+
+    return {
+      nodes: nodes.map((n) => ({
+        id: n.id,
+        title: n.title,
+        type: n.type as string,
+        deletedAt: n.deletedAt!.toISOString(),
+      })),
+    };
+  }
 
   async getCanvas(projectId: string, userId: string): Promise<CanvasSnapshot> {
     // VIEWER 이상이면 조회 가능 — assertPermission이 비멤버 403 처리
