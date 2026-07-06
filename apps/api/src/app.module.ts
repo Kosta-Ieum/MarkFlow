@@ -7,6 +7,8 @@ import { AuthModule } from "./modules/auth/auth.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { ProjectModule } from "./modules/projects/project.module.js";
 import { NodeModule } from "./modules/nodes/node.module.js";
+import { EdgeModule } from "./modules/edges/edge.module.js";
+import { CanvasModule } from "./modules/canvas/canvas.module.js";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
 
 @Module({
@@ -21,7 +23,9 @@ import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
     AuthModule,
     ProjectModule,
     NodeModule,
-    // 도메인 모듈(edges·members·chat·activity·realtime)은
+    EdgeModule,
+    CanvasModule,
+    // 도메인 모듈(members·chat·activity·realtime)은
     // 구현 시 여기에 등록한다.
   ],
   providers: [
