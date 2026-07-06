@@ -1,5 +1,7 @@
 # ─── Stage 1: 빌드 ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
+# Prisma 엔진이 libssl을 요구한다 (alpine 기본 미포함)
+RUN apk add --no-cache openssl
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
 WORKDIR /app
@@ -8,6 +10,8 @@ WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json        ./apps/api/
+# postinstall(prisma generate)이 스키마를 요구하므로 install 전에 복사
+COPY apps/api/prisma              ./apps/api/prisma
 
 RUN pnpm install --frozen-lockfile
 
@@ -17,7 +21,6 @@ COPY packages/shared/src    ./packages/shared/src
 COPY packages/shared/tsconfig.json ./packages/shared/
 COPY apps/api/src           ./apps/api/src
 COPY apps/api/tsconfig.json ./apps/api/
-COPY apps/api/prisma        ./apps/api/prisma
 
 # 빌드 순서: shared → prisma client 생성 → api
 RUN pnpm --filter @markflow/shared build
@@ -27,11 +30,16 @@ RUN pnpm --filter @markflow/api    build
 
 # ─── Stage 2: 실행 ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 
-# node_modules 전체 복사 (prisma 생성 클라이언트 포함)
-COPY --from=builder /app/node_modules        ./node_modules
+# node_modules 복사 — 루트(.pnpm 스토어) + 워크스페이스별 심링크 디렉터리.
+# pnpm은 각 패키지의 의존성을 자기 node_modules의 심링크로 해석하므로
+# 루트만 복사하면 런타임에 모듈 해석이 깨진다 (prisma CLI·@nestjs/* 등).
+COPY --from=builder /app/node_modules                  ./node_modules
+COPY --from=builder /app/packages/shared/node_modules  ./packages/shared/node_modules
+COPY --from=builder /app/apps/api/node_modules         ./apps/api/node_modules
 
 # shared (dist만)
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
