@@ -67,6 +67,14 @@
 - 커서 기반: `?limit=50&before=<ISO8601 or id>`.
 - 응답에 `nextCursor`(없으면 `null`) 포함.
 
+### 0.6 헬스체크
+`GET /health` — 배포 플랫폼(Railway 등)의 상태 확인용. **인증 불필요**(`@Public()`).
+
+응답 `200`
+```json
+{ "status": "ok" }
+```
+
 ---
 
 ## 1. 인증 (Auth) — P0

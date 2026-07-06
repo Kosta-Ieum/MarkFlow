@@ -11,6 +11,8 @@ servers:
 - url: http://localhost:3000/api
   description: Local development
 tags:
+- name: Health
+  description: 배포 환경 헬스체크 (인증 불필요)
 - name: Auth
   description: 회원가입, 로그인, 내 정보, 토큰
 - name: Projects
@@ -34,6 +36,25 @@ tags:
 security: &id001
 - bearerAuth: []
 paths:
+  /health:
+    get:
+      tags:
+      - Health
+      summary: 헬스체크
+      description: 배포 플랫폼(Railway 등)의 상태 확인용. 인증 없이 200을 반환한다.
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
   /auth/signup:
     post:
       tags:

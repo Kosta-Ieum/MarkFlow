@@ -4,6 +4,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { env } from "./config/env.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
+import { HealthModule } from "./modules/health/health.module.js";
 import { ProjectModule } from "./modules/projects/project.module.js";
 import { NodeModule } from "./modules/nodes/node.module.js";
 import { EdgeModule } from "./modules/edges/edge.module.js";
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
       secret: env.JWT_SECRET,
       signOptions: { expiresIn: env.JWT_EXPIRES_IN },
     }),
+    HealthModule,
     AuthModule,
     ProjectModule,
     NodeModule,
