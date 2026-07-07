@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
-import { JwtModule } from "@nestjs/jwt";
+import { APP_GUARD, Reflector } from "@nestjs/core";
+import { JwtModule, JwtService } from "@nestjs/jwt";
 import { env } from "./config/env.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
@@ -27,8 +27,13 @@ import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
     // 구현 시 여기에 등록한다.
   ],
   providers: [
-    // 전역 인증 가드 — 새 라우트는 기본적으로 보호됨. 공개 라우트만 @Public() 명시.
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    Reflector,
+    // useFactory로 DI 토큰을 명시 — tsx/esm 환경에서 emitDecoratorMetadata 없이도 안전.
+    {
+      provide: APP_GUARD,
+      useFactory: (jwt: JwtService, reflector: Reflector) => new JwtAuthGuard(jwt, reflector),
+      inject: [JwtService, Reflector],
+    },
   ],
 })
 export class AppModule {}
