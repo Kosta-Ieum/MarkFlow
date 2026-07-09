@@ -37,7 +37,12 @@ function RoleBadge({ role }: RoleBadgeProps) {
 // ── 에러 메시지 추출 ─────────────────────────────────────────────────────────
 
 function toMessage(err: unknown, fallback: string): string {
-  if (err instanceof ApiError) return err.message;
+  if (err instanceof ApiError) {
+    // NestJS 라우트 미존재 응답("Cannot GET /api/…")은 내부 경로가 노출되므로 사용자에게 보이지 않는다.
+    // 도메인 메시지(예: "이미 초대된 멤버입니다")는 그대로 전달.
+    if (/^Cannot (GET|POST|PATCH|PUT|DELETE) /.test(err.message)) return fallback;
+    return err.message;
+  }
   if (err instanceof Error) return err.message;
   return fallback;
 }

@@ -5,13 +5,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 
 import { App } from "./App";
+import { ApiError } from "./lib/api";
 import "./index.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      retry: 1,
+      // 4xx(404·403·400 등)는 결정적 실패 — 재시도해도 성공하지 않으므로 즉시 에러로.
+      // 그 외(5xx·네트워크)만 1회 재시도.
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+          return false;
+        }
+        return failureCount < 1;
+      },
     },
   },
 });
