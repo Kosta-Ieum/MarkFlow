@@ -208,6 +208,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /auth/email/send-code:
+    post:
+      tags:
+      - Auth
+      summary: 이메일 인증 코드 발송
+      description: 회원가입 전 이메일 인증. 이미 가입된 이메일이면 409. 코드는 6자리 숫자, 3분간 유효.
+      operationId: sendEmailCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendCodeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendCodeResponse'
+        '400':
+          description: ValidationError
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict — 이미 가입된 이메일
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/email/verify:
+    post:
+      tags:
+      - Auth
+      summary: 이메일 인증 코드 검증
+      description: 코드가 없거나 틀리거나 만료됐으면 400. 검증 성공 시 코드 레코드는 삭제된다(1회용).
+      operationId: verifyEmailCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmailResponse'
+        '400':
+          description: ValidationError — 코드 불일치 또는 만료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /projects:
     get:
       tags:
@@ -1401,6 +1473,45 @@ components:
         accessToken:
           type: string
           example: eyJhbGci...
+    SendCodeRequest:
+      type: object
+      required:
+      - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@markflow.app
+    SendCodeResponse:
+      type: object
+      required:
+      - sent
+      properties:
+        sent:
+          type: boolean
+          example: true
+    VerifyEmailRequest:
+      type: object
+      required:
+      - email
+      - code
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@markflow.app
+        code:
+          type: string
+          pattern: ^\d{6}$
+          example: '123456'
+    VerifyEmailResponse:
+      type: object
+      required:
+      - verified
+      properties:
+        verified:
+          type: boolean
+          example: true
     ProjectSummary:
       type: object
       required:
