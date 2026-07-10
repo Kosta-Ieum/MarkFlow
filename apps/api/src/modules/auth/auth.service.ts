@@ -98,6 +98,11 @@ export class AuthService {
   }
 
   async sendEmailCode(email: string): Promise<boolean> {
+    const exists = await this.prisma.user.findUnique({ where: { email } });
+    if (exists) {
+      throw AppException.conflict("이미 가입된 이메일입니다.");
+    }
+
     const code = randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
 
