@@ -2,6 +2,7 @@
 import { useReactFlow } from "@xyflow/react";
 import { Link } from "react-router-dom";
 
+import { canEdit } from "../../lib/permissions";
 import { useCanvasStore } from "../../store/canvasStore";
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from "./constants";
 
@@ -22,6 +23,8 @@ interface LeftSidebarProps {
 export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCount, nodes }: LeftSidebarProps) {
   const width = expanded ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH;
   const projectName = useCanvasStore((s) => s.projectName);
+  const role = useCanvasStore((s) => s.role);
+  const readOnly = role !== null && !canEdit(role);
   const selectedNodeId = useCanvasStore((s) => s.nodes.find((n) => n.selected)?.id);
   const selectNode = useCanvasStore((s) => s.selectNode);
   const { fitView } = useReactFlow();
@@ -53,7 +56,9 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
               type="button"
               aria-label="노드 추가"
               onClick={onAddNode}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+              disabled={readOnly}
+              title={readOnly ? "뷰어는 편집할 수 없습니다" : undefined}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
             >
               +
             </button>
@@ -92,7 +97,9 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
           </div>
 
           <div className="border-t border-line p-3 text-[11px] leading-relaxed text-muted">
-            드래그로 노드를 옮기고, 더블클릭으로 편집, 휴지통으로 끌어다 놓으면 삭제됩니다.
+            {readOnly
+              ? "뷰어 권한 — 캔버스를 보기만 할 수 있어요(이동·편집·삭제 불가)."
+              : "드래그로 노드를 옮기고, 더블클릭으로 편집, 휴지통으로 끌어다 놓으면 삭제됩니다."}
           </div>
         </>
       ) : (
@@ -112,7 +119,9 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
             type="button"
             aria-label="노드 추가"
             onClick={onAddNode}
-            className="grid h-7 w-7 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+            disabled={readOnly}
+            title={readOnly ? "뷰어는 편집할 수 없습니다" : undefined}
+            className="grid h-7 w-7 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
             +
           </button>

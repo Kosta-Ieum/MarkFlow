@@ -5,7 +5,7 @@
 import { create } from "zustand";
 import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import type { Edge, EdgeChange as FlowEdgeChange, Node, NodeChange as FlowNodeChange, OnConnect, XYPosition } from "@xyflow/react";
-import type { EdgeDTO, NodeDTO, NodeType, XY } from "@markflow/shared";
+import type { EdgeDTO, NodeDTO, NodeType, Role, XY } from "@markflow/shared";
 
 import {
   deleteNode as deleteNodeApi,
@@ -78,6 +78,8 @@ interface CanvasState {
   projectId: string | null;
   /** GET canvas 응답의 project.name — LeftSidebar 헤더가 projectId 대신 이걸 표시한다. */
   projectName: string | null;
+  /** GET canvas 응답의 project.role — VIEWER는 뷰(팬·줌)만 허용, 편집 UI는 비활성화(UX 가드, 서버가 최종). */
+  role: Role | null;
   isLoading: boolean;
   isSaving: boolean;
   saveError: string | null;
@@ -155,6 +157,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   trashedNodes: [],
   projectId: null,
   projectName: null,
+  role: null,
   isLoading: false,
   isSaving: false,
   saveError: null,
@@ -168,6 +171,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         nodes: snapshot.nodes.map(fromNodeDTO),
         edges: snapshot.edges,
         projectName: snapshot.project.name,
+        role: snapshot.project.role as Role,
         isLoading: false,
       });
     } catch (err) {

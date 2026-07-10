@@ -11,6 +11,7 @@ import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import type { NodeType } from "@markflow/shared";
 
+import { canEdit } from "../../lib/permissions";
 import { getUserColor } from "../../lib/userColor";
 import { useAuthStore } from "../../store/authStore";
 import { requestNodeLock, useCanvasStore, type MarkdownNodeData } from "../../store/canvasStore";
@@ -44,6 +45,7 @@ function getPreviewLine(markdown: string): string {
 function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: MarkdownNodeData }) {
   const { title, markdown, type, collapsed } = data;
   const toggleCollapse = useCanvasStore((s) => s.applyLocalToggleCollapse);
+  const role = useCanvasStore((s) => s.role);
   const style = TYPE_STYLES[type];
 
   const { projectId = "" } = useParams<{ projectId: string }>();
@@ -62,13 +64,19 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
 
   const handleEnterEdit = () => {
     if (lockedByOther) return; // §4.4 소프트 락: 타인 편집 중이면 진입 차단(읽기 전용)
-    requestNodeLock(id); // 편집 세션 시작 — 해제는 캔버스 이탈 시 소켓 연결 종료로 처리(서버 측 정책)
+    // VIEWER(또는 role 미확정)는 편집 권한이 없으니 락을 잡지 않는다 — 노드 에디터는 읽기 전용으로 열림.
+    if (role !== null && canEdit(role)) {
+      requestNodeLock(id); // 편집 세션 시작 — 해제는 캔버스 이탈 시 소켓 연결 종료로 처리(서버 측 정책)
+    }
     navigate(`/p/${projectId}/n/${id}`);
   };
 
   return (
     <div
-      className={`relative w-[186px] rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
+      // nopan: React Flow는 draggable=false인 노드에는 이 클래스를 안 붙여서, 카드 위 클릭이
+      // 캔버스 배경 팬(이동) 제스처로 흡수돼 더블클릭이 씹힌다(VIEWER=읽기전용에서 실제로 겪은 버그).
+      // draggable=true일 땐 RF가 어차피 자동으로 붙이는 클래스라 중복 추가해도 무해하다.
+      className={`nopan relative w-[186px] rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
         selected ? `ring-[3px] ${style.ring}` : ""
       } ${lockedByOther ? "opacity-80" : ""}`}
       onDoubleClick={handleEnterEdit}

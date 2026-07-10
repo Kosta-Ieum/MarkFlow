@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessageDTO } from "@markflow/shared";
 
-import { sendChatMessage } from "../../store/canvasStore";
+import { canEdit } from "../../lib/permissions";
+import { sendChatMessage, useCanvasStore } from "../../store/canvasStore";
 import { useChatStore } from "../../store/chatStore";
 import { usePresenceStore } from "../../store/presenceStore";
 
@@ -113,8 +114,12 @@ function MessageList({ currentUserId }: { currentUserId: string | null }) {
 
 function MessageComposer() {
   const [value, setValue] = useState("");
+  const role = useCanvasStore((s) => s.role);
+  // 실시간 계약(Docs/09-API-Spec.md §7.4): chat:message도 EDITOR+만 — 뷰어는 읽기만.
+  const readOnly = role !== null && !canEdit(role);
 
   function submit() {
+    if (readOnly) return;
     const content = value.trim();
     if (!content) return;
     sendChatMessage(content);
@@ -131,6 +136,7 @@ function MessageComposer() {
           id="chat-composer-input"
           rows={1}
           value={value}
+          disabled={readOnly}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -138,13 +144,13 @@ function MessageComposer() {
               submit();
             }
           }}
-          placeholder="메시지를 입력하세요"
-          className="max-h-24 flex-1 resize-none rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand"
+          placeholder={readOnly ? "뷰어는 채팅을 보낼 수 없습니다" : "메시지를 입력하세요"}
+          className="max-h-24 flex-1 resize-none rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand disabled:cursor-not-allowed disabled:opacity-60"
         />
         <button
           type="button"
           onClick={submit}
-          disabled={!value.trim()}
+          disabled={readOnly || !value.trim()}
           className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-40"
         >
           전송

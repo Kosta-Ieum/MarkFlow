@@ -15,6 +15,7 @@ import {
 import type { Node as FlowNode, OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { canEdit } from "../../lib/permissions";
 import { emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
 import { CursorOverlay } from "./CursorOverlay";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
@@ -53,6 +54,10 @@ function CanvasSurface({
   const isSaving = useCanvasStore((s) => s.isSaving);
   const saveError = useCanvasStore((s) => s.saveError);
   const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
+  const role = useCanvasStore((s) => s.role);
+  // VIEWER는 캔버스를 팬·줌으로 "보기"만 — 노드 이동·연결·추가·삭제는 UI에서부터 막는다.
+  // (프론트 비활성화는 UX 가드일 뿐, 최종 방어는 서버 — .claude/rules/frontend.md)
+  const readOnly = role !== null && !canEdit(role);
   const { screenToFlowPosition } = useReactFlow();
 
   const trashRef = useRef<HTMLDivElement>(null);
@@ -66,12 +71,14 @@ function CanvasSurface({
   };
 
   const handleNodeDrag: OnNodeDrag<FlowNode> = (event) => {
+    if (readOnly) return;
     const rect = trashRef.current?.getBoundingClientRect();
     const point = getPointerPosition(event);
     setIsDragOverTrash(!!rect && !!point && isPointInRect(point.x, point.y, rect));
   };
 
   const handleNodeDragStop: OnNodeDrag<FlowNode> = (event, node) => {
+    if (readOnly) return;
     const rect = trashRef.current?.getBoundingClientRect();
     const point = getPointerPosition(event);
     if (rect && point && isPointInRect(point.x, point.y, rect)) {
@@ -106,6 +113,9 @@ function CanvasSurface({
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         panOnScroll
+        // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
         // 빈 곳 클릭 시 선택 해제는 React Flow 기본 동작을 그대로 사용.
         proOptions={{ hideAttribution: true }}
       >
@@ -140,7 +150,11 @@ export function CanvasPage() {
     });
   }, [projectId]);
 
+  const role = useCanvasStore((s) => s.role);
+  const readOnly = role !== null && !canEdit(role);
+
   const handleAddNode = () => {
+    if (readOnly) return;
     applyLocalAddNode({ x: 0, y: 0 });
   };
 
@@ -160,11 +174,14 @@ export function CanvasPage() {
           rightPanelExpanded={rightExpanded}
           rightPanelOffset={340}
         />
-        <RightPanel
-          projectId={projectId}
-          expanded={rightExpanded}
-          onToggle={() => setRightExpanded((v) => !v)}
-        />
+        {/* VIEWER는 소켓이 필요 없다 — 채팅/히스토리도 실시간 계약 위에 있으므로 아예 숨긴다(회색 비활성이 아니라 미노출). */}
+        {role !== "VIEWER" && (
+          <RightPanel
+            projectId={projectId}
+            expanded={rightExpanded}
+            onToggle={() => setRightExpanded((v) => !v)}
+          />
+        )}
       </div>
     </ReactFlowProvider>
   );
