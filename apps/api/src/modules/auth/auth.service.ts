@@ -50,10 +50,10 @@ export class AuthService {
       where: { email: dto.email },
       select: { id: true, email: true, name: true, passwordHash: true },
     });
-    if (!user) throw AppException.unauthorized("이메일 또는 비밀번호가 올바르지 않습니다");
+    if (!user) throw AppException.invalidCredentials();
 
     const match = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!match) throw AppException.unauthorized("이메일 또는 비밀번호가 올바르지 않습니다");
+    if (!match) throw AppException.invalidCredentials();
 
     const { passwordHash: _, ...safeUser } = user;
     const tokenPair = await this.issueTokenPair(safeUser.id, safeUser.email);

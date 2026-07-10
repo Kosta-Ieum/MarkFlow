@@ -3,6 +3,7 @@ import { HttpException, HttpStatus } from "@nestjs/common";
 export type ErrorCode =
   | "VALIDATION_ERROR"
   | "UNAUTHORIZED"
+  | "INVALID_CREDENTIALS"
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
@@ -23,6 +24,10 @@ export class AppException extends HttpException {
 
   static unauthorized(message = "인증이 필요합니다") {
     return new AppException("UNAUTHORIZED", HttpStatus.UNAUTHORIZED, message);
+  }
+
+  static invalidCredentials(message = "이메일 또는 비밀번호가 올바르지 않습니다") {
+    return new AppException("INVALID_CREDENTIALS", HttpStatus.BAD_REQUEST, message);
   }
 
   static forbidden(message = "권한이 없습니다") {

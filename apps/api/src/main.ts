@@ -9,7 +9,6 @@ import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe.js";
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix("api");
   app.enableCors({
     origin: env.CORS_ORIGIN,
     credentials: true,
