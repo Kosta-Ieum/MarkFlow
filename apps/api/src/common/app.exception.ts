@@ -45,4 +45,8 @@ export class AppException extends HttpException {
   static unprocessable(message: string) {
     return new AppException("UNPROCESSABLE", HttpStatus.UNPROCESSABLE_ENTITY, message);
   }
+
+  static internal(message = "서버 내부 오류가 발생했습니다") {
+    return new AppException("INTERNAL", HttpStatus.INTERNAL_SERVER_ERROR, message);
+  }
 }

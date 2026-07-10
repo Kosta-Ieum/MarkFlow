@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
+import { randomBytes, randomInt } from "crypto";
+import { Resend } from "resend";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { AppException } from "../../common/app.exception.js";
 import { env } from "../../config/env.js";
@@ -23,11 +24,15 @@ export interface TokenPair {
 
 @Injectable()
 export class AuthService {
+  private resend: Resend;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly refreshStore: RefreshTokenStore,
-  ) {}
+  ) {
+    this.resend = new Resend(env.RESEND_API_KEY || "re_test");
+  }
 
   async signup(dto: SignupRequest): Promise<{ response: AuthResponse; tokenPair: TokenPair }> {
     const exists = await this.prisma.user.findUnique({
@@ -90,6 +95,51 @@ export class AuthService {
     });
     if (!user) throw AppException.notFound("사용자를 찾을 수 없습니다");
     return user;
+  }
+
+  async sendEmailCode(email: string): Promise<boolean> {
+    const code = randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
+
+    await this.prisma.emailVerification.deleteMany({ where: { email } });
+    await this.prisma.emailVerification.create({
+      data: { email, code, expiresAt },
+    });
+
+    if (!env.RESEND_API_KEY) {
+      console.info(`[Mock Email] To: ${email}, Code: ${code}`);
+      return true;
+    }
+
+    try {
+      await this.resend.emails.send({
+        from: "onboarding@resend.dev",
+        to: email,
+        subject: "[MarkFlow] 이메일 인증 코드",
+        html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
+      });
+      return true;
+    } catch (err) {
+      throw AppException.internal("이메일 발송에 실패했습니다");
+    }
+  }
+
+  async verifyEmailCode(email: string, code: string): Promise<boolean> {
+    const record = await this.prisma.emailVerification.findFirst({
+      where: { email, code },
+    });
+
+    if (!record) {
+      throw AppException.badRequest("인증 코드가 올바르지 않습니다.");
+    }
+
+    if (record.expiresAt < new Date()) {
+      await this.prisma.emailVerification.delete({ where: { id: record.id } });
+      throw AppException.badRequest("인증 코드가 만료되었습니다.");
+    }
+
+    await this.prisma.emailVerification.delete({ where: { id: record.id } });
+    return true;
   }
 
   private async issueTokenPair(userId: string, email: string): Promise<TokenPair> {
