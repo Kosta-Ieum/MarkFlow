@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import bcrypt from "bcryptjs";
 import { randomBytes, randomInt } from "crypto";
-import { Resend } from "resend";
+import * as nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { AppException } from "../../common/app.exception.js";
 import { env } from "../../config/env.js";
@@ -24,14 +24,24 @@ export interface TokenPair {
 
 @Injectable()
 export class AuthService {
-  private resend: Resend;
+  private transporter: nodemailer.Transporter | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly refreshStore: RefreshTokenStore,
   ) {
-    this.resend = new Resend(env.RESEND_API_KEY || "re_test");
+    if (env.SMTP_USER && env.SMTP_PASS) {
+      this.transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: env.SMTP_USER,
+          pass: env.SMTP_PASS,
+        },
+      });
+    }
   }
 
   async signup(dto: SignupRequest): Promise<{ response: AuthResponse; tokenPair: TokenPair }> {
@@ -111,20 +121,21 @@ export class AuthService {
       data: { email, code, expiresAt },
     });
 
-    if (!env.RESEND_API_KEY) {
+    if (!this.transporter || !env.SMTP_USER) {
       console.info(`[Mock Email] To: ${email}, Code: ${code}`);
       return true;
     }
 
     try {
-      await this.resend.emails.send({
-        from: "onboarding@resend.dev",
+      await this.transporter.sendMail({
+        from: `"MarkFlow" <${env.SMTP_USER}>`,
         to: email,
         subject: "[MarkFlow] 이메일 인증 코드",
         html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
       });
       return true;
     } catch (err) {
+      console.error("[Email Error]", err);
       throw AppException.internal("이메일 발송에 실패했습니다");
     }
   }
