@@ -9,6 +9,7 @@ import { NodeModule } from "./modules/nodes/node.module.js";
 import { EdgeModule } from "./modules/edges/edge.module.js";
 import { CanvasModule } from "./modules/canvas/canvas.module.js";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
+import { RealtimeModule } from "./realtime/realtime.module.js";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
     CanvasModule,
     // 도메인 모듈(members·chat·activity·realtime)은
     // 구현 시 여기에 등록한다.
+    RealtimeModule,
   ],
   providers: [
     Reflector,

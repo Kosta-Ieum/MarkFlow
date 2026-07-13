@@ -24,7 +24,7 @@ export const XYSchema = z.object({
   y: z.number(),
 });
 
-const UserRefSchema = z.object({
+export const UserRefSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
 });
