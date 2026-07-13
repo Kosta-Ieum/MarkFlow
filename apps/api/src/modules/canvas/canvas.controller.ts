@@ -1,5 +1,8 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Put, UseGuards } from "@nestjs/common";
 import { CanvasService } from "./canvas.service.js";
+import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe.js";
+import { CanvasSaveRequestSchema } from "@markflow/shared";
+import type { CanvasSaveRequest } from "@markflow/shared";
 import type { JwtPayload } from "../../common/guards/jwt-auth.guard.js";
 import { ProjectRoleGuard } from "../../common/guards/project-role.guard.js";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
@@ -18,5 +21,15 @@ export class CanvasController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.canvasService.getCanvas(projectId, user.sub);
+  }
+
+  @Put()
+  @RequireRole("EDITOR")
+  async saveCanvas(
+    @Param("projectId", ParseUUIDPipe) projectId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body(new ZodValidationPipe(CanvasSaveRequestSchema)) dto: CanvasSaveRequest,
+  ) {
+    return this.canvasService.saveCanvas(projectId, user.sub, dto);
   }
 }
