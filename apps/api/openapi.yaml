@@ -70,7 +70,12 @@ paths:
               $ref: '#/components/schemas/SignupRequest'
       responses:
         '201':
-          description: Created
+          description: Created — body에 accessToken, Set-Cookie로 refresh_token(httpOnly)
+          headers:
+            Set-Cookie:
+              description: refresh_token=<token>; HttpOnly; SameSite=Lax; Path=/
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -108,7 +113,12 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: OK
+          description: OK — body에 accessToken, Set-Cookie로 refresh_token(httpOnly)
+          headers:
+            Set-Cookie:
+              description: refresh_token=<token>; HttpOnly; SameSite=Lax; Path=/
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -155,18 +165,24 @@ paths:
     post:
       tags:
       - Auth
-      summary: 토큰 갱신 선택 구현
+      summary: 토큰 갱신 (쿠키의 refresh_token 사용, Bearer 불필요)
       operationId: refreshToken
-      security: *id001
+      security: []
+      description: Cookie의 refresh_token으로 인증. 성공 시 새 accessToken(body) + 새 refresh_token(Set-Cookie). 토큰 회전 적용.
       responses:
         '200':
-          description: OK
+          description: OK — 새 accessToken(body) + Set-Cookie로 새 refresh_token
+          headers:
+            Set-Cookie:
+              description: refresh_token=<new_token>; HttpOnly; SameSite=Lax; Path=/
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RefreshResponse'
         '401':
-          description: Unauthorized
+          description: Unauthorized — refresh_token 없음·만료·무효
           content:
             application/json:
               schema:
@@ -181,12 +197,18 @@ paths:
     post:
       tags:
       - Auth
-      summary: 로그아웃 선택 구현
+      summary: 로그아웃 (쿠키의 refresh_token 무효화)
       operationId: logout
       security: *id001
+      description: DB에서 refresh_token 삭제 + Set-Cookie로 쿠키 제거. refresh_token 없어도 200 반환.
       responses:
         '200':
-          description: OK
+          description: OK — 쿠키 제거
+          headers:
+            Set-Cookie:
+              description: refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT
+              schema:
+                type: string
           content:
             application/json:
               schema:

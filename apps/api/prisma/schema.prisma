@@ -47,10 +47,11 @@ model User {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  ownedProjects Project[]      @relation("ProjectOwner")
-  memberships   ProjectMember[]
-  messages      ChatMessage[]
-  activities    ActivityLog[]
+  ownedProjects  Project[]       @relation("ProjectOwner")
+  memberships    ProjectMember[]
+  messages       ChatMessage[]
+  activities     ActivityLog[]
+  refreshTokens  RefreshToken[]
 }
 
 model Project {
@@ -131,6 +132,18 @@ model ChatMessage {
   user    User    @relation(fields: [userId], references: [id])
 
   @@index([projectId, createdAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  userId    String   @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model ActivityLog {
