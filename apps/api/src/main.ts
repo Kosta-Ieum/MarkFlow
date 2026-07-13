@@ -9,8 +9,12 @@ import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe.js";
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
+  app.setGlobalPrefix("api");
+  // CORS_ORIGIN 설정 시 해당 origin만 허용, 미설정 시 전체 허용(요청 origin 반영).
   app.enableCors({
-    origin: env.CORS_ORIGIN,
+    origin: env.CORS_ORIGIN
+      ? env.CORS_ORIGIN.split(",").map((o) => o.trim())
+      : true,
     credentials: true,
   });
   app.use(cookieParser());

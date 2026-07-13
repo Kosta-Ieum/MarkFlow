@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
+import { randomBytes, randomInt } from "crypto";
+import * as nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { AppException } from "../../common/app.exception.js";
 import { env } from "../../config/env.js";
@@ -23,11 +24,25 @@ export interface TokenPair {
 
 @Injectable()
 export class AuthService {
+  private transporter: nodemailer.Transporter | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly refreshStore: RefreshTokenStore,
-  ) {}
+  ) {
+    if (env.SMTP_USER && env.SMTP_PASS) {
+      this.transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: env.SMTP_USER,
+          pass: env.SMTP_PASS,
+        },
+      });
+    }
+  }
 
   async signup(dto: SignupRequest): Promise<{ response: AuthResponse; tokenPair: TokenPair }> {
     const exists = await this.prisma.user.findUnique({
@@ -92,6 +107,56 @@ export class AuthService {
     return user;
   }
 
+  async sendEmailCode(email: string): Promise<boolean> {
+    const exists = await this.prisma.user.findUnique({ where: { email } });
+    if (exists) {
+      throw AppException.conflict("이미 가입된 이메일입니다.");
+    }
+
+    const code = randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
+
+    await this.prisma.emailVerification.deleteMany({ where: { email } });
+    await this.prisma.emailVerification.create({
+      data: { email, code, expiresAt },
+    });
+
+    if (!this.transporter || !env.SMTP_USER) {
+      console.info(`[Mock Email] To: ${email}, Code: ${code}`);
+      return true;
+    }
+
+    try {
+      await this.transporter.sendMail({
+        from: `"MarkFlow" <${env.SMTP_USER}>`,
+        to: email,
+        subject: "[MarkFlow] 이메일 인증 코드",
+        html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
+      });
+      return true;
+    } catch (err) {
+      console.error("[Email Error]", err);
+      throw AppException.internal("이메일 발송에 실패했습니다");
+    }
+  }
+
+  async verifyEmailCode(email: string, code: string): Promise<boolean> {
+    const record = await this.prisma.emailVerification.findFirst({
+      where: { email, code },
+    });
+
+    if (!record) {
+      throw AppException.badRequest("인증 코드가 올바르지 않습니다.");
+    }
+
+    if (record.expiresAt < new Date()) {
+      await this.prisma.emailVerification.delete({ where: { id: record.id } });
+      throw AppException.badRequest("인증 코드가 만료되었습니다.");
+    }
+
+    await this.prisma.emailVerification.delete({ where: { id: record.id } });
+    return true;
+  }
   private async issueTokenPair(userId: string, email: string): Promise<TokenPair> {
     const accessToken = this.signAccess({ id: userId, email });
     const refreshToken = this.genRefreshToken();

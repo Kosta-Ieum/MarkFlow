@@ -102,4 +102,8 @@ export const SocketPayloadSchemas = {
     projectId: z.string().uuid(),
     userId: z.string().uuid(),
   }),
+
+  [SOCKET_EVENTS.syncResync]: z.object({
+    projectId: z.string().uuid(),
+  }),
 } as const;

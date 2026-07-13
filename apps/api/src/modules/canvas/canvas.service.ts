@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { assertPermission } from "../../shared/permission.js";
 import { AppException } from "../../common/app.exception.js";
-import type { CanvasSnapshot, NodeDTO } from "@markflow/shared";
+import type { CanvasSnapshot, NodeDTO, CanvasSaveRequest, CanvasSaveResponse } from "@markflow/shared";
 
 export interface TrashNode {
   id: string;
@@ -57,6 +57,10 @@ export class CanvasService {
         deletedAt: n.deletedAt!.toISOString(),
       })),
     };
+  }
+
+  async assertEditorPermission(projectId: string, userId: string): Promise<void> {
+    await assertPermission(this.prisma, projectId, userId, "EDITOR");
   }
 
   async getCanvas(projectId: string, userId: string): Promise<CanvasSnapshot> {
@@ -114,5 +118,89 @@ export class CanvasService {
         target: e.targetId,
       })),
     };
+  }
+
+  async saveCanvas(
+    projectId: string,
+    userId: string,
+    dto: CanvasSaveRequest,
+  ): Promise<CanvasSaveResponse> {
+    await this.assertEditorPermission(projectId, userId);
+
+    // DTO에 있는 노드/엣지들의 ID 목록
+    const nodeIds = dto.nodes.map((n) => n.id);
+    const edgeIds = dto.edges.map((e) => e.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. 기존 활성 노드 중 DTO에 없는 것 삭제 (물리 삭제)
+      // *주의: 삭제된 노드(deletedAt != null)는 유지해야 하므로 deletedAt: null 조건 추가
+      await tx.node.deleteMany({
+        where: {
+          projectId,
+          deletedAt: null,
+          id: { notIn: nodeIds.length > 0 ? nodeIds : [""] },
+        },
+      });
+
+      // 2. 노드 삽입 또는 업데이트
+      for (const node of dto.nodes) {
+        await tx.node.upsert({
+          where: { id: node.id },
+          update: {
+            title: node.title,
+            markdown: node.markdown,
+            type: node.type,
+            collapsed: node.collapsed,
+            posX: node.position.x,
+            posY: node.position.y,
+          },
+          create: {
+            id: node.id,
+            projectId,
+            title: node.title,
+            markdown: node.markdown,
+            type: node.type,
+            collapsed: node.collapsed,
+            posX: node.position.x,
+            posY: node.position.y,
+          },
+        });
+      }
+
+      // 3. 기존 엣지 중 DTO에 없는 것 삭제
+      if (edgeIds.length > 0) {
+        await tx.edge.deleteMany({
+          where: {
+            projectId,
+            id: { notIn: edgeIds },
+          },
+        });
+      } else {
+        await tx.edge.deleteMany({
+          where: {
+            projectId,
+          },
+        });
+      }
+
+      // 4. 엣지 삽입 또는 업데이트
+      for (const edge of dto.edges) {
+        await tx.edge.upsert({
+          where: { id: edge.id },
+          update: {
+            sourceId: edge.source,
+            targetId: edge.target,
+          },
+          create: {
+            id: edge.id,
+            projectId,
+            sourceId: edge.source,
+            targetId: edge.target,
+          },
+        });
+      }
+    });
+
+    return { savedAt: new Date().toISOString() };
   }
 }
