@@ -146,6 +146,17 @@ model RefreshToken {
   @@index([userId])
 }
 
+model EmailVerification {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([email, code])
+  @@index([email])
+}
+
 model ActivityLog {
   id         String         @id @default(uuid()) @db.Uuid
   projectId  String         @db.Uuid

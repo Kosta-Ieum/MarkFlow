@@ -16,10 +16,17 @@ import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe.js";
 import { AppException } from "../../common/app.exception.js";
 import { env } from "../../config/env.js";
 import {
-  SignupRequestSchema,
+ 
   LoginRequestSchema,
-  type SignupRequest,
-  type LoginRequest,
+  SignupRequestSchema,
+  SendCodeRequestSchema,
+  VerifyEmailRequestSchema,
+} from "@markflow/shared";
+import type {
+  LoginRequest,
+  SignupRequest,
+  SendCodeRequest,
+  VerifyEmailRequest,
 } from "@markflow/shared";
 import type { TokenPair } from "./auth.service.js";
 
@@ -96,6 +103,22 @@ export class AuthController {
     if (token) await this.authService.logout(token);
     clearRefreshCookie(res);
     return { ok: true };
+  }
+
+  @Public()
+  @Post("email/send-code")
+  @HttpCode(200)
+  async sendEmailCode(@Body(new ZodValidationPipe(SendCodeRequestSchema)) dto: SendCodeRequest) {
+    const sent = await this.authService.sendEmailCode(dto.email);
+    return { sent };
+  }
+
+  @Public()
+  @Post("email/verify")
+  @HttpCode(200)
+  async verifyEmailCode(@Body(new ZodValidationPipe(VerifyEmailRequestSchema)) dto: VerifyEmailRequest) {
+    const verified = await this.authService.verifyEmailCode(dto.email, dto.code);
+    return { verified };
   }
 
   // 전역 JwtAuthGuard가 기본 보호 — @Public() 없으니 가드 통과해야 진입
