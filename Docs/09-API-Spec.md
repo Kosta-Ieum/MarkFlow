@@ -67,6 +67,19 @@
 - 커서 기반: `?limit=50&before=<ISO8601 or id>`.
 - 응답에 `nextCursor`(없으면 `null`) 포함.
 
+### 0.6 헬스체크
+`GET /health` — 배포 플랫폼(Railway 등)의 상태 확인용. **인증 불필요**(`@Public()`).
+
+응답 `200`
+```json
+{ "status": "ok" }
+```
+
+### 0.7 CORS
+- 허용 origin은 `CORS_ORIGIN` 환경변수로 제어(콤마 구분 다중 허용).
+- **미설정 시 전체 허용**(요청 origin 반영) — 개발·초기 배포 편의.
+- 프로덕션에서는 프론트 배포 도메인을 `CORS_ORIGIN`에 지정해 제한한다.
+
 ---
 
 ## 1. 인증 (Auth) — P0
