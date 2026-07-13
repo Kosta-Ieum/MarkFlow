@@ -7,6 +7,7 @@ import {
   EdgeDTOSchema,
   CanvasSnapshotSchema,
   ChatMessageDTOSchema,
+  UserRefSchema,
   XYSchema,
 } from "./schemas.js";
 
@@ -81,6 +82,10 @@ export const SocketPayloadSchemas = {
   [SOCKET_EVENTS.lockRelease]: z.object({
     projectId: z.string().uuid(),
     nodeId: z.string().uuid(),
+  }),
+
+  [SOCKET_EVENTS.presenceUpdate]: z.object({
+    users: z.array(UserRefSchema),
   }),
 
   [SOCKET_EVENTS.chatMessage]: z.object({

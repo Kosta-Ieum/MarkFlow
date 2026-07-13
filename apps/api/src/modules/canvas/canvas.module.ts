@@ -7,5 +7,6 @@ import { PrismaModule } from "../../prisma/prisma.module.js";
   imports: [PrismaModule],
   controllers: [CanvasController],
   providers: [CanvasService],
+  exports: [CanvasService],
 })
 export class CanvasModule {}
