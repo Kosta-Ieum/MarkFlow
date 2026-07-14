@@ -104,7 +104,9 @@ function CanvasSurface({
       emitCursorPosition(flowPos);
     };
     window.addEventListener("pointermove", handleWindowPointerMove);
-    return () => window.removeEventListener("pointermove", handleWindowPointerMove);
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+    };
   }, []);
 
   return (
@@ -192,7 +194,9 @@ export function CanvasPage() {
           <RightPanel
             projectId={projectId}
             expanded={rightExpanded}
-            onToggle={() => setRightExpanded((v) => !v)}
+            onToggle={() => {
+              setRightExpanded((v) => !v);
+            }}
           />
         )}
       </div>

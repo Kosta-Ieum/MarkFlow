@@ -69,7 +69,7 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
               <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
                 {role && (
                   <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-secondary">
-                    {ROLE_LABEL[role]}
+                    {ROLE_LABEL.get(role)}
                   </span>
                 )}
                 <span>노드 {nodeCount}개</span>

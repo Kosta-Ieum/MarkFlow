@@ -141,10 +141,9 @@ export function NodeEditorPage() {
     e.preventDefault();
     const el = e.currentTarget;
     const { selectionStart, selectionEnd, value } = el;
-    const insert = "<br>\n";
-    const next = value.slice(0, selectionStart) + insert + value.slice(selectionEnd);
+    const next = `${value.slice(0, selectionStart)}<br>\n${value.slice(selectionEnd)}`;
     setMarkdown(next);
-    const caret = selectionStart + insert.length;
+    const caret = selectionStart + "<br>\n".length;
     requestAnimationFrame(() => {
       el.selectionStart = el.selectionEnd = caret;
     });
