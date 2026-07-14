@@ -6,6 +6,7 @@ import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import type { ForwardedRef } from "react";
 import MDEditor from "@uiw/react-md-editor";
 
+import { canEdit } from "../../lib/permissions";
 import { useCanvasStore } from "../../store/canvasStore";
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from "./constants";
 
@@ -62,6 +63,8 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
   const trashedNodes = useCanvasStore((s) => s.trashedNodes);
   const applyLocalRestoreNode = useCanvasStore((s) => s.applyLocalRestoreNode);
   const applyLocalPermanentDeleteNode = useCanvasStore((s) => s.applyLocalPermanentDeleteNode);
+  const role = useCanvasStore((s) => s.role);
+  const readOnly = role !== null && !canEdit(role);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const offsetLeft = leftSidebarExpanded ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH;
@@ -170,24 +173,26 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
                       <span className="flex-1 truncate text-ink">{node.data.title || "제목 없음"}</span>
                       <button
                         type="button"
+                        disabled={readOnly}
                         onClick={(e) => {
                           e.stopPropagation();
                           applyLocalRestoreNode(node.id);
                         }}
-                        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10"
+                        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                       >
                         복원
                       </button>
                       <button
                         type="button"
                         aria-label="영구삭제"
+                        disabled={readOnly}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (window.confirm(`"${node.data.title || "제목 없음"}" 노드를 영구삭제하시겠습니까? 되돌릴 수 없습니다.`)) {
                             applyLocalPermanentDeleteNode(node.id);
                           }
                         }}
-                        className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted hover:bg-error-bg hover:text-error"
+                        className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted hover:bg-error-bg hover:text-error disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                       >
                         ✕
                       </button>

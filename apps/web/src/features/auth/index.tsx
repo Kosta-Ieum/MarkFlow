@@ -120,7 +120,7 @@ function LoginForm({ onSuccess }: LoginFormProps) {
 
 interface SignupFormProps {
   defaultValues?: Partial<SignupRequest>;
-  onVerifyNeeded: (name: string, email: string, password: string) => void;
+  onVerifyNeeded: (name: string, email: string, password: string, nickname: string) => void;
 }
 
 function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
@@ -135,7 +135,7 @@ function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
 
   // 가입은 여기서 하지 않는다 — 이메일 인증 단계(VerifyStep)로 전환만.
   const handleSignup = handleSubmit((data) => {
-    onVerifyNeeded(data.name, data.email, data.password);
+    onVerifyNeeded(data.name, data.email, data.password, data.nickname);
   });
 
   const busy = isSubmitting;
@@ -158,6 +158,24 @@ function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
           />
           {errors.name && (
             <p className="mt-1 text-xs text-error">{errors.name.message}</p>
+          )}
+        </div>
+
+        {/* 닉네임 — 협업 화면(멤버·채팅)에 표시될 공개 이름 */}
+        <div>
+          <label htmlFor="signup-nickname" className="mb-1.5 block text-sm font-medium text-secondary">
+            닉네임
+          </label>
+          <input
+            id="signup-nickname"
+            type="text"
+            autoComplete="nickname"
+            placeholder="협업 화면에 표시될 이름 (2~20자)"
+            className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+            {...register("nickname")}
+          />
+          {errors.nickname && (
+            <p className="mt-1 text-xs text-error">{errors.nickname.message}</p>
           )}
         </div>
 
@@ -221,13 +239,14 @@ interface VerifyStepProps {
   name: string;
   email: string;
   password: string;
+  nickname: string;
   onBack: () => void;
   onSuccess: () => void;
 }
 
 type VerifyCodeForm = Pick<VerifyEmailRequest, "code">;
 
-function VerifyStep({ name, email, password, onBack, onSuccess }: VerifyStepProps) {
+function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: VerifyStepProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const sentRef = useRef(false);
@@ -280,7 +299,7 @@ function VerifyStep({ name, email, password, onBack, onSuccess }: VerifyStepProp
         setServerError("인증 코드가 올바르지 않습니다.");
         return;
       }
-      await useAuthStore.getState().signup(name, email, password);
+      await useAuthStore.getState().signup(name, email, password, nickname);
       onSuccess();
     } catch (err) {
       const message =
@@ -363,6 +382,7 @@ interface PendingSignup {
   name: string;
   email: string;
   password: string;
+  nickname: string;
 }
 
 export function AuthPage({ mode }: AuthPageProps) {
@@ -404,14 +424,15 @@ export function AuthPage({ mode }: AuthPageProps) {
               name={pending.name}
               email={pending.email}
               password={pending.password}
+              nickname={pending.nickname}
               onBack={() => setStep("input")}
               onSuccess={handleSuccess}
             />
           ) : (
             <SignupForm
               defaultValues={pending ?? undefined}
-              onVerifyNeeded={(name, email, password) => {
-                setPending({ name, email, password });
+              onVerifyNeeded={(name, email, password, nickname) => {
+                setPending({ name, email, password, nickname });
                 setStep("verify");
               }}
             />

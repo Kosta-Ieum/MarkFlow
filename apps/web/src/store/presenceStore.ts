@@ -19,6 +19,9 @@ interface PresenceState {
   upsertCursor: (userId: string, xy: XY) => void;
   removeCursor: (userId: string) => void;
   setLock: (nodeId: string, userId: string | null) => void;
+  /** presence:update로 접속자 명단이 바뀔 때, 이제 접속자 목록에 없는 유저의 커서·락을 정리한다.
+   * 타인이 캔버스에서 나가도 유령 커서/락이 남던 문제(§F1-피드백)의 근본 수정. */
+  pruneOffline: (onlineIds: string[]) => void;
   clear: () => void;
 }
 
@@ -45,6 +48,18 @@ export const usePresenceStore = create<PresenceState>((set) => ({
       if (userId) next[nodeId] = userId;
       else delete next[nodeId];
       return { locks: next };
+    }),
+
+  pruneOffline: (onlineIds) =>
+    set((state) => {
+      const online = new Set(onlineIds);
+      const cursors = Object.fromEntries(
+        Object.entries(state.cursors).filter(([userId]) => online.has(userId)),
+      );
+      const locks = Object.fromEntries(
+        Object.entries(state.locks).filter(([, userId]) => online.has(userId)),
+      );
+      return { cursors, locks };
     }),
 
   clear: () => set({ onlineUsers: [], cursors: {}, locks: {} }),

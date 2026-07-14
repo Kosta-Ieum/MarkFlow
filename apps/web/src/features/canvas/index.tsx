@@ -15,12 +15,13 @@ import {
 import type { Node as FlowNode, OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { canEdit } from "../../lib/permissions";
 import { emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
 import { CursorOverlay } from "./CursorOverlay";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
 import { MarkdownNodeCard } from "./MarkdownNodeCard";
-import { RightPanel } from "./RightPanel";
+import { RightPanel, RIGHT_PANEL_EXPANDED_WIDTH } from "./RightPanel";
 import { seedEdges, seedNodes } from "./seedNodes";
 import { TrashPanel } from "./TrashPanel";
 import { ZoomControls } from "./ZoomControls";
@@ -53,6 +54,10 @@ function CanvasSurface({
   const isSaving = useCanvasStore((s) => s.isSaving);
   const saveError = useCanvasStore((s) => s.saveError);
   const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
+  const role = useCanvasStore((s) => s.role);
+  // VIEWER는 캔버스를 팬·줌으로 "보기"만 — 노드 이동·연결·추가·삭제는 UI에서부터 막는다.
+  // (프론트 비활성화는 UX 가드일 뿐, 최종 방어는 서버 — .claude/rules/frontend.md)
+  const readOnly = role !== null && !canEdit(role);
   const { screenToFlowPosition } = useReactFlow();
 
   const trashRef = useRef<HTMLDivElement>(null);
@@ -66,12 +71,14 @@ function CanvasSurface({
   };
 
   const handleNodeDrag: OnNodeDrag<FlowNode> = (event) => {
+    if (readOnly) return;
     const rect = trashRef.current?.getBoundingClientRect();
     const point = getPointerPosition(event);
     setIsDragOverTrash(!!rect && !!point && isPointInRect(point.x, point.y, rect));
   };
 
   const handleNodeDragStop: OnNodeDrag<FlowNode> = (event, node) => {
+    if (readOnly) return;
     const rect = trashRef.current?.getBoundingClientRect();
     const point = getPointerPosition(event);
     if (rect && point && isPointInRect(point.x, point.y, rect)) {
@@ -82,13 +89,28 @@ function CanvasSurface({
 
   // 멀티커서 렌더링(IEUM-35) 전이라도 emit 배선은 여기서 끝내둔다 — 커서 throttle(≈50ms)은
   // useSocketCollab 안에서 처리하므로 여기선 그냥 매 mousemove마다 호출해도 된다.
-  const handlePointerMove = (e: React.MouseEvent) => {
-    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    emitCursorPosition(flowPos);
-  };
+  //
+  // 캔버스 div의 onPointerMove가 아니라 window 리스너로 잡는다 — 실제 마우스가 사이드바
+  // 위로 넘어가면(사이드바 z-index가 더 높아 그 지점의 이벤트 타깃이 됨) div 핸들러는
+  // 더 이상 안 불려서 위치 전송이 사이드바 경계에서 멈춰버렸다(다른 탭에서 커서가 거기서
+  // 멈춘 것처럼 보임). window 레벨에서 받으면 타깃이 무엇이든 버블링으로 항상 잡히므로,
+  // 실제 마우스는 계속 추적하고 화면에 가려지는지는 오직 각자 화면의 z-index로만 결정된다.
+  const screenToFlowPositionRef = useRef(screenToFlowPosition);
+  screenToFlowPositionRef.current = screenToFlowPosition;
+
+  useEffect(() => {
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      const flowPos = screenToFlowPositionRef.current({ x: e.clientX, y: e.clientY });
+      emitCursorPosition(flowPos);
+    };
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+    };
+  }, []);
 
   return (
-    <div className="relative h-full flex-1" onPointerMove={handlePointerMove}>
+    <div className="relative h-full flex-1">
       <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
         {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
       </div>
@@ -106,6 +128,9 @@ function CanvasSurface({
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         panOnScroll
+        // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
         // 빈 곳 클릭 시 선택 해제는 React Flow 기본 동작을 그대로 사용.
         proOptions={{ hideAttribution: true }}
       >
@@ -140,7 +165,11 @@ export function CanvasPage() {
     });
   }, [projectId]);
 
+  const role = useCanvasStore((s) => s.role);
+  const readOnly = role !== null && !canEdit(role);
+
   const handleAddNode = () => {
+    if (readOnly) return;
     applyLocalAddNode({ x: 0, y: 0 });
   };
 
@@ -158,13 +187,18 @@ export function CanvasPage() {
         <CanvasSurface
           leftSidebarExpanded={leftExpanded}
           rightPanelExpanded={rightExpanded}
-          rightPanelOffset={340}
+          rightPanelOffset={RIGHT_PANEL_EXPANDED_WIDTH}
         />
-        <RightPanel
-          projectId={projectId}
-          expanded={rightExpanded}
-          onToggle={() => setRightExpanded((v) => !v)}
-        />
+        {/* VIEWER는 소켓이 필요 없다 — 채팅/히스토리도 실시간 계약 위에 있으므로 아예 숨긴다(회색 비활성이 아니라 미노출). */}
+        {role !== "VIEWER" && (
+          <RightPanel
+            projectId={projectId}
+            expanded={rightExpanded}
+            onToggle={() => {
+              setRightExpanded((v) => !v);
+            }}
+          />
+        )}
       </div>
     </ReactFlowProvider>
   );
