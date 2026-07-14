@@ -3,6 +3,7 @@ import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { env } from "./config/env.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
+import { PrismaService } from "./prisma/prisma.service.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { ProjectModule } from "./modules/projects/project.module.js";
@@ -43,8 +44,8 @@ import { EventsModule } from "./common/events/events.module.js";
     // useFactory로 DI 토큰을 명시 — tsx/esm 환경에서 emitDecoratorMetadata 없이도 안전.
     {
       provide: APP_GUARD,
-      useFactory: (jwt: JwtService, reflector: Reflector) => new JwtAuthGuard(jwt, reflector),
-      inject: [JwtService, Reflector],
+      useFactory: (jwt: JwtService, reflector: Reflector, prisma: PrismaService) => new JwtAuthGuard(jwt, reflector, prisma),
+      inject: [JwtService, Reflector, PrismaService],
     },
   ],
 })

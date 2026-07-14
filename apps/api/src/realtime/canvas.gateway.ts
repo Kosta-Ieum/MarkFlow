@@ -65,6 +65,25 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
 
   onModuleInit() {
     this.events.events$.subscribe(async (event) => {
+      if (event.type === "USER_LOGGED_OUT") {
+        const targetUserId = event.payload.userId;
+        const sockets = await this.server.fetchSockets();
+        for (const s of sockets) {
+          if (s.data.userId === targetUserId) {
+            const { affectedProjects, releasedLocks } = this.presenceService.removeSocketFromAll(s.id);
+            for (const pId of affectedProjects) {
+              this.server.to(roomOf(pId)).emit(SOCKET_EVENTS.presenceUpdate, { users: this.presenceService.list(pId) });
+            }
+            for (const lock of releasedLocks) {
+              this.server.to(roomOf(lock.projectId)).emit(SOCKET_EVENTS.lockUpdate, { nodeId: lock.nodeId, userId: null });
+            }
+            s.disconnect(true);
+          }
+        }
+        return;
+      }
+
+      if (!event.projectId) return;
       const room = roomOf(event.projectId);
 
       if (event.type === "NODE_RESTORED") {
@@ -96,11 +115,9 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
               for (const lock of releasedLocks) {
                 this.server.to(roomOf(lock.projectId)).emit(SOCKET_EVENTS.lockUpdate, { nodeId: lock.nodeId, userId: null });
               }
-              // If removed or downgraded to VIEWER, they can't stay in collab room
-              if (event.type === "MEMBER_REMOVED") {
-                 s.leave(room);
-                 s.disconnect(true);
-              }
+              // If removed or downgraded to VIEWER, force kick them from the socket room
+              s.leave(room);
+              s.disconnect(true);
             }
           }
         }

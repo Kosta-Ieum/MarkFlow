@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Subject } from "rxjs";
 
 export interface ProjectEvent {
-  projectId: string;
+  projectId?: string;
   triggerUserId?: string;
   type: 
     | "NODE_RESTORED" 
@@ -10,7 +10,8 @@ export interface ProjectEvent {
     | "NODE_DELETED"
     | "ACTIVITY_ADDED"
     | "MEMBER_REMOVED"
-    | "MEMBER_ROLE_CHANGED";
+    | "MEMBER_ROLE_CHANGED"
+    | "USER_LOGGED_OUT";
   payload?: any;
 }
 
