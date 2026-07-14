@@ -72,10 +72,24 @@ export class ProjectService {
   ): Promise<ProjectUpdateResponse> {
     await assertPermission(this.prisma, projectId, userId, "OWNER");
 
-    const project = await this.prisma.project.update({
-      where: { id: projectId },
-      data: { name: dto.name },
-      select: { id: true, name: true, updatedAt: true },
+    const project = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.project.update({
+        where: { id: projectId },
+        data: { name: dto.name },
+        select: { id: true, name: true, updatedAt: true },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          projectId,
+          userId,
+          targetType: "PROJECT",
+          targetId: projectId,
+          action: "RENAME",
+        },
+      });
+
+      return updated;
     });
 
     return {

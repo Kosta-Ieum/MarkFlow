@@ -11,6 +11,7 @@ import { EdgeModule } from "./modules/edges/edge.module.js";
 import { CanvasModule } from "./modules/canvas/canvas.module.js";
 import { MemberModule } from "./modules/members/member.module.js";
 import { ChatModule } from "./modules/chat/chat.module.js";
+import { ActivityModule } from "./modules/activity/activity.module.js";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
 import { RealtimeModule } from "./realtime/realtime.module.js";
 
@@ -30,7 +31,8 @@ import { RealtimeModule } from "./realtime/realtime.module.js";
     CanvasModule,
     MemberModule,
     ChatModule,
-    // 도메인 모듈(members·chat·activity·realtime)은
+    ActivityModule,
+    // 도메인 모듈(realtime)은
     // 구현 시 여기에 등록한다.
     RealtimeModule,
   ],
