@@ -24,7 +24,7 @@ export const XYSchema = z.object({
   y: z.number(),
 });
 
-const UserRefSchema = z.object({
+export const UserRefSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
 });
@@ -56,11 +56,29 @@ export const CanvasSnapshotSchema = z.object({
   edges: z.array(EdgeDTOSchema),
 });
 
+export const CanvasSaveRequestSchema = z.object({
+  nodes: z.array(NodeDTOSchema),
+  edges: z.array(EdgeDTOSchema),
+});
+
+export const CanvasSaveResponseSchema = z.object({
+  savedAt: z.string().datetime(),
+});
+
 export const ChatMessageDTOSchema = z.object({
   id: z.string().uuid(),
   content: z.string(),
   createdAt: z.string().datetime(),
   user: UserRefSchema,
+});
+
+export const ChatMessageCreateRequestSchema = z.object({
+  content: z.string().min(1),
+});
+
+export const MessagesResponseSchema = z.object({
+  messages: z.array(ChatMessageDTOSchema),
+  nextCursor: z.string().nullable(),
 });
 
 export const ActivityDTOSchema = z.object({

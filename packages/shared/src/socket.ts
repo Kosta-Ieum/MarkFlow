@@ -7,6 +7,7 @@ import {
   EdgeDTOSchema,
   CanvasSnapshotSchema,
   ChatMessageDTOSchema,
+  UserRefSchema,
   XYSchema,
 } from "./schemas.js";
 
@@ -83,6 +84,10 @@ export const SocketPayloadSchemas = {
     nodeId: z.string().uuid(),
   }),
 
+  [SOCKET_EVENTS.presenceUpdate]: z.object({
+    users: z.array(UserRefSchema),
+  }),
+
   [SOCKET_EVENTS.chatMessage]: z.object({
     projectId: z.string().uuid(),
     content: z.string().min(1),
@@ -96,5 +101,9 @@ export const SocketPayloadSchemas = {
   [SOCKET_EVENTS.chatTyping]: z.object({
     projectId: z.string().uuid(),
     userId: z.string().uuid(),
+  }),
+
+  [SOCKET_EVENTS.syncResync]: z.object({
+    projectId: z.string().uuid(),
   }),
 } as const;
