@@ -15,7 +15,7 @@ import {
   SignupRequestSchema,
   VerifyEmailRequestSchema,
 } from "@markflow/shared";
-import { api } from "../../lib/api";
+import { api, takeSessionNotice } from "../../lib/api";
 import { useAuthStore } from "../../store/authStore";
 
 interface AuthPageProps {
@@ -394,6 +394,16 @@ export function AuthPage({ mode }: AuthPageProps) {
   const [step, setStep] = useState<"input" | "verify">("input");
   const isVerifyStep = !isLogin && step === "verify" && pending !== null;
 
+  // 서버가 세션을 강제 종료(다른 기기 로그인 등)해 로그인 화면으로 튕긴 경우 사유를 1회 표시.
+  // takeSessionNotice는 읽으면서 지우므로, StrictMode 이중 이펙트에 값이 소실되지 않게 ref로 가드.
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeReadRef = useRef(false);
+  useEffect(() => {
+    if (noticeReadRef.current) return;
+    noticeReadRef.current = true;
+    setNotice(takeSessionNotice());
+  }, []);
+
   const handleSuccess = () => {
     void navigate("/projects");
   };
@@ -415,6 +425,15 @@ export function AuthPage({ mode }: AuthPageProps) {
               ? "인증 코드를 입력하면 가입이 완료돼요"
               : "몇 초면 계정을 만들 수 있어요"}
         </p>
+
+        {notice && (
+          <div
+            role="alert"
+            className="mt-6 rounded-lg border border-error-border bg-error-bg px-4 py-3 text-sm text-error"
+          >
+            {notice}
+          </div>
+        )}
 
         <div className="mt-8">
           {isLogin ? (
