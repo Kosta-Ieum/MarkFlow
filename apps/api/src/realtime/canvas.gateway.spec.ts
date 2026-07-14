@@ -16,7 +16,7 @@ const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const MEMBER_USER_ID = "22222222-2222-4222-8222-222222222222";
 const NON_MEMBER_USER_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_MEMBER_USER_ID = "44444444-4444-4444-8444-444444444444";
-const JWT_SECRET = "test-jwt-secret-please-ignore";
+const JWT_SECRET_KEY = process.env.JWT_SECRET ?? "test-jwt-secret-key-123";
 
 function makeMockPrisma() {
   return {
@@ -57,7 +57,7 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
       imports: [
         JwtModule.register({
           global: true,
-          secret: JWT_SECRET,
+          secret: JWT_SECRET_KEY,
           signOptions: { expiresIn: "1h" },
         }),
         RealtimeModule,
@@ -98,14 +98,14 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
 
   function waitForConnectError(client: ClientSocket): Promise<Error> {
     return new Promise((resolve) => {
-      client.on("connect_error", (err) => resolve(err));
+      client.on("connect_error", (err) => { resolve(err); });
     });
   }
 
   function waitForConnect(client: ClientSocket): Promise<void> {
     return new Promise((resolve, reject) => {
-      client.on("connect", () => resolve());
-      client.on("connect_error", (err) => reject(err));
+      client.on("connect", () => { resolve(); });
+      client.on("connect_error", (err) => { reject(err instanceof Error ? err : new Error(String(err))); });
     });
   }
 
@@ -136,7 +136,7 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
     await waitForConnect(client);
 
     const syncInitPromise = new Promise<CanvasSnapshot>((resolve) => {
-      client.on(SOCKET_EVENTS.syncInit, (snapshot: CanvasSnapshot) => resolve(snapshot));
+      client.on(SOCKET_EVENTS.syncInit, (snapshot: CanvasSnapshot) => { resolve(snapshot); });
     });
 
     const ack = await new Promise<{ ok: boolean }>((resolve) => {
@@ -177,7 +177,7 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
     });
 
     const presenceUpdatePromise = new Promise<{ users: { id: string; name: string }[] }>((resolve) => {
-      clientA.on(SOCKET_EVENTS.presenceUpdate, (payload) => resolve(payload));
+      clientA.on(SOCKET_EVENTS.presenceUpdate, (payload) => { resolve(payload); });
     });
 
     const clientB = connect(tokenB);

@@ -15,7 +15,7 @@ export class WsJwtGuard implements CanActivate {
   constructor(@Inject(JwtService) private readonly jwt: JwtService) {}
 
   async verifyHandshake(socket: Socket): Promise<string> {
-    const token = (socket.handshake.auth as { token?: string })?.token;
+    const token = (socket.handshake.auth as { token?: string }).token;
     if (!token) throw new Error("UNAUTHORIZED");
 
     let payload: JwtPayload;

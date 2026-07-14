@@ -58,8 +58,8 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     server.use((socket: Socket, next: (err?: Error) => void) => {
       guard
         .verifyHandshake(socket)
-        .then(() => next())
-        .catch(() => next(new Error("UNAUTHORIZED")));
+        .then(() => { next(); })
+        .catch(() => { next(new Error("UNAUTHORIZED")); });
     });
   }
 
