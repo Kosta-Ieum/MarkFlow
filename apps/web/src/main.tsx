@@ -26,6 +26,19 @@ async function bootstrap(): Promise<void> {
   if (import.meta.env.VITE_MOCK_API === "1") {
     const { worker } = await import("./mocks/browser");
     await worker.start({ onUnhandledRequest: "bypass" });
+
+    // 다른 탭(계정)이 초대 등으로 mock DB를 바꾸면 storage 이벤트로 db.ts는
+    // 갱신되지만 React Query 캐시는 모른다 — 여기서 project/member 쿼리를
+    // 무효화해 이 탭 화면에도 즉시 반영되게 한다.
+    const { MOCK_DB_UPDATED_EVENT } = await import("./mocks/db");
+    window.addEventListener(MOCK_DB_UPDATED_EVENT, () => {
+      void queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return key === "projects" || key === "project";
+        },
+      });
+    });
   }
 
   createRoot(container as HTMLElement).render(

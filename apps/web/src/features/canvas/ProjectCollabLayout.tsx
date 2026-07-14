@@ -7,13 +7,21 @@ import { Outlet, useParams } from "react-router-dom";
 
 import { useCollaboration } from "../../collab/useCollaboration";
 import { setActiveCollab } from "../../store/canvasStore";
+import { useCanvasSnapshot } from "../node-editor/useNodeEditor";
 
 export function ProjectCollabLayout() {
   const { projectId = "" } = useParams<{ projectId: string }>();
   const collab = useCollaboration(projectId);
+  // role을 먼저 알아야 연결 여부를 정할 수 있어 여기서도 캔버스 스냅샷을 조회한다
+  // (CanvasPage/NodeEditorPage가 각자 또 로드하는 것과 별개 — react-query가 같은 키로 캐시 공유).
+  const { data: snapshot } = useCanvasSnapshot(projectId);
+  const role = snapshot?.project.role;
 
   useEffect(() => {
     if (!projectId) return;
+    // role을 아직 모르면 대기(섣부른 연결 방지). VIEWER는 소켓이 아예 필요 없다 —
+    // 실시간 갱신(멀티커서·소프트락·채팅·히스토리) 없이 REST로 불러온 스냅샷만 본다.
+    if (role === undefined || role === "VIEWER") return;
     collab.connect(projectId);
     setActiveCollab(collab);
     return () => {
@@ -21,7 +29,7 @@ export function ProjectCollabLayout() {
       collab.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, role]);
 
   return <Outlet />;
 }

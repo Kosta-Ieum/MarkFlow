@@ -5,7 +5,7 @@
 import { create } from "zustand";
 import { applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import type { Edge, EdgeChange as FlowEdgeChange, Node, NodeChange as FlowNodeChange, OnConnect, XYPosition } from "@xyflow/react";
-import type { EdgeDTO, NodeDTO, NodeType, XY } from "@markflow/shared";
+import type { EdgeDTO, NodeDTO, NodeType, Role, XY } from "@markflow/shared";
 
 import {
   deleteNode as deleteNodeApi,
@@ -78,6 +78,8 @@ interface CanvasState {
   projectId: string | null;
   /** GET canvas 응답의 project.name — LeftSidebar 헤더가 projectId 대신 이걸 표시한다. */
   projectName: string | null;
+  /** GET canvas 응답의 project.role — VIEWER는 뷰(팬·줌)만 허용, 편집 UI는 비활성화(UX 가드, 서버가 최종). */
+  role: Role | null;
   isLoading: boolean;
   isSaving: boolean;
   saveError: string | null;
@@ -155,6 +157,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   trashedNodes: [],
   projectId: null,
   projectName: null,
+  role: null,
   isLoading: false,
   isSaving: false,
   saveError: null,
@@ -168,6 +171,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         nodes: snapshot.nodes.map(fromNodeDTO),
         edges: snapshot.edges,
         projectName: snapshot.project.name,
+        role: snapshot.project.role as Role,
         isLoading: false,
       });
     } catch (err) {
@@ -328,6 +332,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const { projectId } = get();
     set((state) => ({ trashedNodes: state.trashedNodes.filter((n) => n.id !== id) }));
     if (projectId) fireAndForget(purgeNodeApi(projectId, id));
+    // node:delete는 캔버스 소프트삭제에도 쓰이지만, 원격에서 이 id가 이미 nodes에 없으면
+    // (즉 이미 휴지통 항목이면) applyRemoteDeleteNode가 "영구삭제"로 해석해 정리한다 —
+    // 별도 소켓 이벤트 없이 휴지통 갯수/목록을 다른 탭에도 즉시 반영(§CV-16 실시간 동기화 공백 수정).
+    activeCollab?.emitNode({ type: "delete", nodeId: id });
   },
 
   applyLocalAddEdge: (source, target) => {
@@ -345,7 +353,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // --- 원격 수신 적용 (재emit 금지) ---
   applyRemoteAddNode: (node) => {
-    set((state) => ({ nodes: [...state.nodes, node] }));
+    // node:add는 신규 생성과 휴지통 복원(§CV-16) 둘 다에 쓰인다 — 복원이면 원격 탭의
+    // trashedNodes에도 같은 id가 남아 있을 수 있으니 중복되지 않게 같이 제거한다.
+    set((state) => ({
+      nodes: [...state.nodes, node],
+      trashedNodes: state.trashedNodes.filter((n) => n.id !== node.id),
+    }));
   },
 
   applyRemoteUpdateNode: (id, patch, position) => {
@@ -359,10 +372,21 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   applyRemoteDeleteNode: (id) => {
-    set((state) => ({
-      nodes: state.nodes.filter((n) => n.id !== id),
-      edges: state.edges.filter((e) => e.source !== id && e.target !== id),
-    }));
+    // node:delete는 (a) 캔버스→휴지통 소프트삭제, (b) 휴지통 영구삭제 둘 다에 쓰인다.
+    // 이 id가 현재 nodes(살아있는 캔버스)에 있으면 (a) — 휴지통으로 옮겨서 다른 탭의
+    // 휴지통 갯수/목록도 즉시 반영한다(§CV-16 실시간 동기화 공백 수정). nodes에 없으면
+    // 이미 휴지통에 있던 항목이 영구삭제된 (b) — trashedNodes에서도 마저 지운다.
+    set((state) => {
+      const target = state.nodes.find((n) => n.id === id);
+      if (target) {
+        return {
+          nodes: state.nodes.filter((n) => n.id !== id),
+          edges: state.edges.filter((e) => e.source !== id && e.target !== id),
+          trashedNodes: [...state.trashedNodes, target],
+        };
+      }
+      return { trashedNodes: state.trashedNodes.filter((n) => n.id !== id) };
+    });
   },
 
   applyRemoteAddEdge: (edge) => {
