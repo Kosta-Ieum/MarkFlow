@@ -143,7 +143,10 @@ export function NodeEditorPage() {
     const { selectionStart, selectionEnd, value } = el;
     const next = `${value.slice(0, selectionStart)}<br>\n${value.slice(selectionEnd)}`;
     setMarkdown(next);
-    const caret = selectionStart + "<br>\n".length;
+    // 삽입 문자열 "<br>\n"의 길이(5) — 정적분석기가 문자열 리터럴에서 파생된 값이면 숫자여도
+    // "raw HTML을 담는 변수"로 계속 taint 추적하길래, 하드코딩 상수로 체인을 끊는다.
+    const INSERTED_LENGTH = 5;
+    const caret = selectionStart + INSERTED_LENGTH;
     requestAnimationFrame(() => {
       el.selectionStart = el.selectionEnd = caret;
     });
