@@ -17,6 +17,10 @@ import { env } from "../config/env.js";
 import { AppException } from "../common/app.exception.js";
 import { CanvasService } from "../modules/canvas/canvas.service.js";
 import { ChatService } from "../modules/chat/chat.service.js";
+import { NodeService } from "../modules/nodes/node.service.js";
+import type { NodeCreateRequest, NodeUpdateRequest } from "../modules/nodes/node.dto.js";
+import { EdgeService } from "../modules/edges/edge.service.js";
+import type { EdgeCreateRequest } from "../modules/edges/edge.dto.js";
 import { PresenceService } from "./presence.js";
 import { WsJwtGuard } from "./ws-jwt.guard.js";
 
@@ -44,6 +48,8 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     @Inject(WsJwtGuard) private readonly wsJwtGuard: WsJwtGuard,
     @Inject(CanvasService) private readonly canvasService: CanvasService,
     @Inject(ChatService) private readonly chatService: ChatService,
+    @Inject(NodeService) private readonly nodeService: NodeService,
+    @Inject(EdgeService) private readonly edgeService: EdgeService,
     @Inject(PresenceService) private readonly presenceService: PresenceService,
   ) {}
 
@@ -92,56 +98,126 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     return { ok: true, data: snapshot };
   }
 
+  // 노드/엣지 변경 이벤트: 권한 확인은 각 Service의 assertPermission(내부 1행)에서 수행된다.
+  // 순서: 파싱 → service 호출(DB 저장 + ActivityLog, 실패 시 여기서 throw) → 성공 시에만 broadcast → ack.
+  // broadcast payload는 항상 service가 반환한 저장 결과(서버 생성 id/updatedAt)를 사용한다
+  // — 클라이언트가 보낸 값을 그대로 릴레이하지 않는다(.claude/rules/backend.md 서비스 seam).
   @UseGuards(WsJwtGuard)
   @SubscribeMessage(SOCKET_EVENTS.nodeAdd)
   async handleNodeAdd(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<AckResponse> {
-    return this.handleEditorEvent(socket, body, SOCKET_EVENTS.nodeAdd);
+    const parsed = SocketPayloadSchemas[SOCKET_EVENTS.nodeAdd].safeParse(body);
+    if (!parsed.success) {
+      return { ok: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } };
+    }
+    const { projectId, node } = parsed.data;
+    const userId = socket.data.userId as string;
+
+    const dto: NodeCreateRequest = {
+      title: node.title,
+      markdown: node.markdown,
+      type: node.type,
+      position: node.position,
+    };
+
+    try {
+      const created = await this.nodeService.create(projectId, userId, dto);
+      this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeAdd, { projectId, node: created });
+      return { ok: true, data: { node: created } };
+    } catch (err) {
+      return this.toErrorAck(err);
+    }
   }
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage(SOCKET_EVENTS.nodeUpdate)
   async handleNodeUpdate(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<AckResponse> {
-    return this.handleEditorEvent(socket, body, SOCKET_EVENTS.nodeUpdate);
+    const parsed = SocketPayloadSchemas[SOCKET_EVENTS.nodeUpdate].safeParse(body);
+    if (!parsed.success) {
+      return { ok: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } };
+    }
+    const { projectId, node } = parsed.data;
+    const userId = socket.data.userId as string;
+
+    const dto: NodeUpdateRequest = {
+      ...(node.title !== undefined && { title: node.title }),
+      ...(node.markdown !== undefined && { markdown: node.markdown }),
+      ...(node.type !== undefined && { type: node.type }),
+      ...(node.collapsed !== undefined && { collapsed: node.collapsed }),
+      ...(node.position !== undefined && { position: node.position }),
+    };
+
+    try {
+      const updated = await this.nodeService.update(projectId, userId, node.id, dto);
+      this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeUpdate, { projectId, node: updated });
+      return { ok: true, data: { node: updated } };
+    } catch (err) {
+      return this.toErrorAck(err);
+    }
   }
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage(SOCKET_EVENTS.nodeDelete)
   async handleNodeDelete(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<AckResponse> {
-    return this.handleEditorEvent(socket, body, SOCKET_EVENTS.nodeDelete);
+    const parsed = SocketPayloadSchemas[SOCKET_EVENTS.nodeDelete].safeParse(body);
+    if (!parsed.success) {
+      return { ok: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } };
+    }
+    const { projectId, nodeId } = parsed.data;
+    const userId = socket.data.userId as string;
+
+    try {
+      const result = await this.nodeService.softDelete(projectId, userId, nodeId);
+      this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeDelete, { projectId, nodeId: result.id });
+      return { ok: true, data: result };
+    } catch (err) {
+      return this.toErrorAck(err);
+    }
   }
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage(SOCKET_EVENTS.edgeAdd)
   async handleEdgeAdd(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<AckResponse> {
-    return this.handleEditorEvent(socket, body, SOCKET_EVENTS.edgeAdd);
+    const parsed = SocketPayloadSchemas[SOCKET_EVENTS.edgeAdd].safeParse(body);
+    if (!parsed.success) {
+      return { ok: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } };
+    }
+    const { projectId, edge } = parsed.data;
+    const userId = socket.data.userId as string;
+
+    const dto: EdgeCreateRequest = { source: edge.source, target: edge.target };
+
+    try {
+      const created = await this.edgeService.createEdge(projectId, userId, dto);
+      this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeAdd, { projectId, edge: created });
+      return { ok: true, data: { edge: created } };
+    } catch (err) {
+      return this.toErrorAck(err);
+    }
   }
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage(SOCKET_EVENTS.edgeDelete)
   async handleEdgeDelete(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<AckResponse> {
-    return this.handleEditorEvent(socket, body, SOCKET_EVENTS.edgeDelete);
-  }
-
-  private async handleEditorEvent(socket: Socket, body: unknown, event: string): Promise<AckResponse> {
-    // @ts-expect-error 동적 스키마 참조
-    const parsed = SocketPayloadSchemas[event].safeParse(body);
+    const parsed = SocketPayloadSchemas[SOCKET_EVENTS.edgeDelete].safeParse(body);
     if (!parsed.success) {
       return { ok: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } };
     }
-
-    const payload = parsed.data as { projectId: string };
+    const { projectId, edgeId } = parsed.data;
     const userId = socket.data.userId as string;
 
     try {
-      await this.canvasService.assertEditorPermission(payload.projectId, userId);
+      const result = await this.edgeService.deleteEdge(projectId, userId, edgeId);
+      this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeDelete, { projectId, edgeId: result.id });
+      return { ok: true, data: result };
     } catch (err) {
-      const code = err instanceof AppException ? err.code : "FORBIDDEN";
-      const message = err instanceof Error ? err.message : "권한이 없습니다";
-      return { ok: false, error: { code, message } };
+      return this.toErrorAck(err);
     }
+  }
 
-    socket.to(roomOf(payload.projectId)).emit(event, payload);
-    return { ok: true };
+  private toErrorAck(err: unknown): AckResponse {
+    const code = err instanceof AppException ? err.code : "FORBIDDEN";
+    const message = err instanceof Error ? err.message : "권한이 없습니다";
+    return { ok: false, error: { code, message } };
   }
 
   @UseGuards(WsJwtGuard)
@@ -171,9 +247,18 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
 
     const acquired = this.presenceService.acquireLock(projectId, nodeId, socket.id, userId);
-    if (acquired) {
-      this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.lockUpdate, { nodeId, userId });
+    if (!acquired) {
+      const holder = this.presenceService.getLock(projectId, nodeId);
+      return {
+        ok: false,
+        error: {
+          code: "LOCK_HELD",
+          message: holder ? `다른 사용자(${holder.userId})가 이미 편집 중입니다` : "이미 다른 사용자가 편집 중입니다",
+        },
+      };
     }
+
+    this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.lockUpdate, { nodeId, userId });
     return { ok: true };
   }
 
@@ -193,9 +278,14 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
 
     const released = this.presenceService.releaseLock(projectId, nodeId, socket.id);
-    if (released) {
-      this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.lockUpdate, { nodeId, userId: null });
+    if (!released) {
+      return {
+        ok: false,
+        error: { code: "LOCK_NOT_HELD", message: "이 소켓이 보유한 락이 아닙니다" },
+      };
     }
+
+    this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.lockUpdate, { nodeId, userId: null });
     return { ok: true };
   }
 

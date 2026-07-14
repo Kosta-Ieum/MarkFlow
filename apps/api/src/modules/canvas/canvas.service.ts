@@ -134,13 +134,22 @@ export class CanvasService {
     await this.prisma.$transaction(async (tx) => {
       // 1. 기존 활성 노드 중 DTO에 없는 것 삭제 (물리 삭제)
       // *주의: 삭제된 노드(deletedAt != null)는 유지해야 하므로 deletedAt: null 조건 추가
-      await tx.node.deleteMany({
-        where: {
-          projectId,
-          deletedAt: null,
-          id: { notIn: nodeIds.length > 0 ? nodeIds : [""] },
-        },
-      });
+      if (nodeIds.length > 0) {
+        await tx.node.deleteMany({
+          where: {
+            projectId,
+            deletedAt: null,
+            id: { notIn: nodeIds },
+          },
+        });
+      } else {
+        await tx.node.deleteMany({
+          where: {
+            projectId,
+            deletedAt: null,
+          },
+        });
+      }
 
       // 2. 노드 삽입 또는 업데이트
       for (const node of dto.nodes) {

@@ -91,6 +91,11 @@ export class PresenceService {
     return true;
   }
 
+  /** 현재 노드를 잠근 사용자 정보(없으면 undefined). ack 에러 메시지에 보유자 정보를 실어주기 위함. */
+  getLock(projectId: string, nodeId: string): { userId: string; socketId: string } | undefined {
+    return this.locks.get(projectId)?.get(nodeId);
+  }
+
   releaseLock(projectId: string, nodeId: string, socketId: string): boolean {
     const pLocks = this.locks.get(projectId);
     if (!pLocks) return false;
