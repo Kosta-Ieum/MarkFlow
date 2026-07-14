@@ -139,6 +139,7 @@ function MessageComposer() {
           disabled={readOnly}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
+
             if(e.nativeEvent.isComposing) return; // 한글 조합 중에는 submit 방지
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

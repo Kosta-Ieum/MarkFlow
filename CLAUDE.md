@@ -21,6 +21,7 @@
 - 역할/경계: `Docs/10-Team-Roles.md` · 컨벤션(코딩·Git): `Docs/11-Conventions.md`
 - 일정·이슈: **Linear**(워크스페이스 `kostateam2`, 문서 없음)
 - 경로별 상세 불변식: `.claude/rules/`
+- PR 양식 정본: `.github/pull_request_template.md`
 
 ## 구조
 - `apps/api` — 백엔드 (NestJS + Socket.io + Prisma)
@@ -37,6 +38,7 @@
 ## Non-negotiable rules
 - 생성물 직접 편집 금지: `node_modules/`, `**/dist/`, `apps/api/prisma/migrations/`, Prisma client.
 - merge · deploy · 프로덕션 데이터 변경 · `main` 직접 push · force-push 금지. (feature 브랜치 push + PR 생성은 에이전트 허용 — merge는 사람이 승인 후.)
+- PR 본문은 항상 `.github/pull_request_template.md` 양식(작업 요약 · 주요 변경 사항 · 상세 작업 내용 · 테스트 결과 · 리뷰어에게 전달할 말)을 그대로 따른다. 임의 생략·변형 금지.
 - 스키마 변경은 Prisma 마이그레이션 + 롤백 설명 + `Docs/08-ERD.md` 동시 갱신.
 - REST 계약 변경은 `apps/api/openapi.yaml`을 먼저 수정(정본). `packages/shared` DTO/이벤트 변경은 `packages/shared/src/`(zod)를 먼저 수정. 둘 다 BE·FE 양쪽 사용처 + `Docs/09-API-Spec.md` 동시 갱신. (절차 → `api-contract-change` 스킬)
 - 권한은 서버가 최종 가드 — REST + Socket **양쪽**. 프론트 비활성화는 UX용.
