@@ -12,6 +12,9 @@ import type {
   Member,
 } from "@markflow/shared";
 
+/* eslint-disable security/detect-object-injection --
+   mock 전용 in-memory store: 대괄호 키는 email·projectId·userId 등 내부 값이라 주입 위험 없음. */
+
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
 
 let idSeq = 0;
