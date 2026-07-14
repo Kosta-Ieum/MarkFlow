@@ -53,46 +53,51 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
     >
       {expanded ? (
         <>
-          <div className="flex items-center justify-between gap-2 border-b border-line p-3">
+          <div className="border-b border-line p-3">
+            {/* 뒤로가기는 사이드바 접기 버튼과 나란히 있으면 헷갈린다는 피드백 반영 —
+                별도 줄에 화살표+텍스트로 분리해 "나가는 동작"임을 명확히 한다. */}
             <Link
               to="/projects"
-              aria-label="프로젝트 목록으로 나가기"
+              aria-label="뒤로가기 - 프로젝트 목록으로 나가기"
               title="프로젝트 목록으로 나가기"
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+              className="mb-2 flex items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-secondary hover:bg-canvas hover:text-ink"
             >
               <ExitToProjectsIcon />
+              뒤로가기
             </Link>
-            <div className="min-w-0 flex-1 px-1 py-1">
-              <span className="block truncate text-sm font-medium text-ink">
-                {projectName ?? `프로젝트 ${projectId}`}
-              </span>
-              <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
-                {role && (
-                  <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-secondary">
-                    {ROLE_LABEL.get(role)}
-                  </span>
-                )}
-                <span>노드 {nodeCount}개</span>
-              </span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1 px-1 py-1">
+                <span className="block truncate text-sm font-medium text-ink">
+                  {projectName ?? `프로젝트 ${projectId}`}
+                </span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+                  {role && (
+                    <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-secondary">
+                      {ROLE_LABEL.get(role)}
+                    </span>
+                  )}
+                  <span>노드 {nodeCount}개</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label="노드 추가"
+                onClick={onAddNode}
+                disabled={readOnly}
+                title={readOnly ? "뷰어는 편집할 수 없습니다" : undefined}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                aria-label="사이드바 접기"
+                onClick={onToggle}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+              >
+                «
+              </button>
             </div>
-            <button
-              type="button"
-              aria-label="노드 추가"
-              onClick={onAddNode}
-              disabled={readOnly}
-              title={readOnly ? "뷰어는 편집할 수 없습니다" : undefined}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              aria-label="사이드바 접기"
-              onClick={onToggle}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
-            >
-              «
-            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3">

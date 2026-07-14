@@ -1,34 +1,67 @@
 // 휴지통 (아코디언 + 드래그 드롭존) — IEUM-28 [F1-2.2], 화면설계서 §4.4.5
-// 좌측 사이드바 상태에 따라 기본 위치가 이동한다(ctrlLeft). 손잡이(🗑 버튼)를 드래그하면
-// 자유 배치로 전환되고(이후 사이드바 토글에 안 따라감) 위치가 localStorage에 남는다.
-// 드래그 중인 노드 카드가 이 영역 위에서 손을 놓으면 소프트 삭제(§CV-08/CV-16) — 별개 기능.
+// 기본 위치는 캔버스 우측 상단. "사용자가 실제로 드래그했을 때만" 위치가 바뀐다 —
+// 리사이즈/클릭 등 다른 이유로는 절대 위치가 바뀌지 않는다(§피드백: 미세한 클릭 떨림이
+// 드래그로 오인되어 위치가 고정되던 버그 수정).
+// - anchor="left": 캔버스 좌측 기준 거리 저장 → 좌측 사이드바 폭이 바뀌면(flex reflow로
+//   캔버스 컨테이너 원점이 이동) 자동으로 따라간다. 화면 중앙에 놓아도 캔버스 기준 상대
+//   위치라 "그 자리 유지"로 보인다.
+// - anchor="right": 캔버스 우측 기준 거리 저장 → 우측 패널 폭이 바뀌면 자동으로 따라간다.
+// 창이 좁아져 저장된 위치가 화면 밖으로 나가면 렌더링 값만 안쪽으로 클램프하고(저장값은
+// 안 건드림) — 창이 다시 커지면 클램프가 풀리며 원래 위치로 돌아온다.
+// 드래그 중에는 좌표를 캔버스 컨테이너 안쪽으로만 강제해 좌/우 패널 밑에 숨는 것을 막는다.
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import type { ForwardedRef } from "react";
 import MDEditor from "@uiw/react-md-editor";
 
 import { canEdit } from "../../lib/permissions";
 import { useCanvasStore } from "../../store/canvasStore";
-import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from "./constants";
 
-const POSITION_STORAGE_KEY = "markflow-trash-pos";
+const POSITION_STORAGE_KEY = "markflow-trash-pos-v2";
 
 // 목록 패널 크기 추정치 — 화면 밖으로 잘리는지 판단하는 용도라 정확한 실측값일 필요는 없다.
 const PANEL_WIDTH = 256; // w-64
 const PANEL_HEIGHT = 320; // 헤더 + max-h-56 목록 + 패딩 여유
 const EDGE_MARGIN = 12;
+// 토글 버튼(🗑 휴지통 N) 크기 추정치 — 기본 위치·클램프 계산용, 정밀한 실측값일 필요는 없다.
+const BUTTON_WIDTH_APPROX = 96;
+const BUTTON_HEIGHT_APPROX = 36;
+// 드롭 지점이 캔버스 우측 가장자리에서 이 거리 안이면 "우측 근처"로 보고 우측 기준으로 고정한다.
+const RIGHT_ZONE_WIDTH = 180;
+// 클릭과 드래그를 가르는 픽셀 임계값 — 너무 낮으면 클릭 중 손 떨림이 드래그로 오인된다.
+const DRAG_THRESHOLD = 10;
+
+type Anchor = "left" | "right";
 
 interface TrashPos {
-  left: number;
   bottom: number;
+  anchor: Anchor;
+  /** anchor="left"면 캔버스 좌측 기준 거리, anchor="right"면 캔버스 우측 기준 거리. */
+  offset: number;
+}
+
+function isTrashPos(v: unknown): v is TrashPos {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as TrashPos).bottom === "number" &&
+    typeof (v as TrashPos).offset === "number" &&
+    ((v as TrashPos).anchor === "left" || (v as TrashPos).anchor === "right")
+  );
 }
 
 function loadStoredPos(): TrashPos | null {
   try {
     const raw = localStorage.getItem(POSITION_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as TrashPos) : null;
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isTrashPos(parsed) ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
 // style.left/bottom은 캔버스 컨테이너(offsetParent) 기준이라, 우측 채팅 패널 등으로 좁아진
@@ -47,13 +80,12 @@ const TYPE_DOT: Record<string, string> = {
 };
 
 interface TrashPanelProps {
-  leftSidebarExpanded: boolean;
   /** 드래그 중인 노드가 이 영역 위에 있는지 — 드롭 힌트 강조용 */
   isDragOver: boolean;
 }
 
 export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function TrashPanel(
-  { leftSidebarExpanded, isDragOver },
+  { isDragOver },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -66,21 +98,55 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
   const role = useCanvasStore((s) => s.role);
   const readOnly = role !== null && !canEdit(role);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // 캔버스 컨테이너(offsetParent) 크기 — 렌더링 시점의 클램프·기본 위치 계산에만 쓰고,
+  // pos(사용자가 드래그로 정한 값)는 이 값 때문에 절대 갱신하지 않는다.
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  // 드래그 도중 미리보기 위치 — pointerup에서 확정되기 전까지는 pos에 반영하지 않는다.
+  const [dragPreview, setDragPreview] = useState<{ left: number; bottom: number } | null>(null);
 
-  const offsetLeft = leftSidebarExpanded ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH;
-  const left = pos?.left ?? offsetLeft + 24;
-  const bottom = pos?.bottom ?? 24;
+  useLayoutEffect(() => {
+    const parent = containerRef.current?.offsetParent as HTMLElement | null;
+    if (!parent) return;
+    const measure = () => setContainerSize({ width: parent.clientWidth, height: parent.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, []);
 
-  // 화면 가장자리로 옮겨졌을 때 패널이 뷰포트 밖으로 잘리지 않도록 여는 방향을 뒤집는다.
+  const maxLeft = Math.max(containerSize.width - BUTTON_WIDTH_APPROX - EDGE_MARGIN, EDGE_MARGIN);
+  const maxBottom = Math.max(containerSize.height - BUTTON_HEIGHT_APPROX - EDGE_MARGIN, EDGE_MARGIN);
+
+  // 렌더링용 위치 — 드래그 중이면 미리보기, 아니면 저장된 pos(없으면 우측 상단 기본값)를
+  // 화면 크기에 맞춰 "표시만" 클램프한다(저장값 자체는 안 바뀌므로 창이 다시 커지면 복귀).
+  let left: number;
+  let bottom: number;
+  if (dragPreview) {
+    left = dragPreview.left;
+    bottom = dragPreview.bottom;
+  } else if (pos) {
+    const rawLeft = pos.anchor === "right" ? containerSize.width - pos.offset : pos.offset;
+    left = clamp(rawLeft, EDGE_MARGIN, maxLeft);
+    bottom = clamp(pos.bottom, EDGE_MARGIN, maxBottom);
+  } else {
+    left = maxLeft; // 기본값: 우측
+    bottom = maxBottom; // 기본값: 상단
+  }
+
+  // 화면 가장자리로 옮겨졌을 때 패널이 잘리지 않도록 여는 방향을 뒤집는다.
   // (위로 갈수록 위로 열면 잘림 → 아래로, 오른쪽으로 갈수록 왼쪽 정렬이면 잘림 → 오른쪽 정렬로)
-  // 실제 화면(viewport) 좌표 기준으로 판단해야 해서 style.left/bottom이 아니라
-  // getBoundingClientRect(캔버스 컨테이너 폭 등 레이아웃 결과 반영)로 잰다.
+  // window.innerWidth가 아니라 "캔버스 컨테이너(offsetParent)"의 뷰포트 경계와 비교해야 한다 —
+  // 우측 패널이 그 바깥을 차지하고 있어서, window 기준으로는 여유가 있어 보여도 실제로는
+  // 우측 패널에 가려지는 버그가 있었다.
   useLayoutEffect(() => {
     if (!open || !containerRef.current) return;
+    const parent = containerRef.current.offsetParent as HTMLElement | null;
+    const bounds = (parent ?? document.documentElement).getBoundingClientRect();
     const rect = containerRef.current.getBoundingClientRect();
     setDirection({
-      openUpward: rect.top - PANEL_HEIGHT - EDGE_MARGIN >= 0,
-      anchorRight: rect.left + PANEL_WIDTH + EDGE_MARGIN > window.innerWidth,
+      openUpward: rect.top - PANEL_HEIGHT - EDGE_MARGIN >= bounds.top,
+      anchorRight: rect.left + PANEL_WIDTH + EDGE_MARGIN > bounds.right,
     });
   }, [open, left, bottom]);
   const { openUpward, anchorRight } = direction;
@@ -98,19 +164,28 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
     if (!drag) return;
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
-    if (!wasDraggedRef.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) wasDraggedRef.current = true;
+    if (!wasDraggedRef.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+      wasDraggedRef.current = true;
+    }
     if (wasDraggedRef.current) {
-      setPos({ left: drag.origLeft + dx, bottom: drag.origBottom - dy });
+      // 좌/우 패널 밑으로 숨어버리지 않도록, 드래그 중에도 항상 캔버스 컨테이너 안쪽으로만 제한한다.
+      setDragPreview({
+        left: clamp(drag.origLeft + dx, EDGE_MARGIN, maxLeft),
+        bottom: clamp(drag.origBottom - dy, EDGE_MARGIN, maxBottom),
+      });
     }
   };
 
   const handlePointerUp = () => {
-    if (wasDraggedRef.current) {
-      setPos((p) => {
-        if (p) localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(p));
-        return p;
-      });
+    if (wasDraggedRef.current && dragPreview) {
+      const nearRight = containerSize.width - dragPreview.left <= RIGHT_ZONE_WIDTH;
+      const next: TrashPos = nearRight
+        ? { bottom: dragPreview.bottom, anchor: "right", offset: containerSize.width - dragPreview.left }
+        : { bottom: dragPreview.bottom, anchor: "left", offset: dragPreview.left };
+      setPos(next);
+      localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(next));
     }
+    setDragPreview(null);
     dragRef.current = null;
   };
 
