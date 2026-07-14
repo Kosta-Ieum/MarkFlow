@@ -21,6 +21,7 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string, nickname: string) => Promise<void>;
+  updateProfile: (nickname: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -90,6 +91,15 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  // 프로필 표시명 변경(R4.1). 응답 user로 상태 갱신 → 즉시 반영.
+  updateProfile: async (nickname) => {
+    const data = await api<User>("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify({ nickname }),
+    });
+    if (data) set({ user: data });
   },
 
   logout: async () => {

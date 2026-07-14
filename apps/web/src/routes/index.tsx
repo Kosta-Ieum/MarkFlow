@@ -8,6 +8,7 @@ import { CanvasPage } from "../features/canvas";
 import { ProjectCollabLayout } from "../features/canvas/ProjectCollabLayout";
 import { LandingPage } from "../features/landing";
 import { NodeEditorPage } from "../features/node-editor";
+import { ProfilePage } from "../features/profile";
 import { ProjectsPage } from "../features/projects";
 import { useAuthStore } from "../store/authStore";
 
@@ -44,6 +45,14 @@ export function AppRoutes() {
           element={
             <ProtectedRoute>
               <ProjectsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           }
         />
