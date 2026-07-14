@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  envDir: "../..",
   server: { port: 5173 },
   // 모노레포: .env는 레포 루트에 있다(bootstrap이 루트에 생성). 기본 envDir(apps/web)로는
   // VITE_*를 못 읽어 localhost 폴백으로 동작하므로 루트를 지정한다(project root 기준 상대경로).

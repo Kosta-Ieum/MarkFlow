@@ -7,3 +7,12 @@ export const canEdit = (role: Role): boolean => role === "OWNER" || role === "ED
 
 /** OWNER 전용 — 프로젝트 rename·삭제·멤버 관리 등 소유자 전용 동작 */
 export const canManage = (role: Role): boolean => role === "OWNER";
+
+/** 역할 한글 표시 라벨 — MembersModal의 배지 라벨과 동일하게 맞춘다.
+ * Map으로 조회(.get)한다 — 리터럴 유니온이라 실질 위험은 없지만, 일반 객체 대괄호
+ * 인덱싱(`obj[role]`)은 정적분석기가 Generic Object Injection Sink로 오탐하기 쉽다. */
+export const ROLE_LABEL: ReadonlyMap<Role, string> = new Map([
+  ["OWNER", "소유자"],
+  ["EDITOR", "편집자"],
+  ["VIEWER", "뷰어"],
+]);

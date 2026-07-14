@@ -10,6 +10,8 @@ import {
   NodeDTOSchema,
   EdgeDTOSchema,
   CanvasSnapshotSchema,
+  CanvasSaveRequestSchema,
+  CanvasSaveResponseSchema,
   ChatMessageDTOSchema,
   ActivityDTOSchema,
   ErrorResponseSchema,
@@ -36,6 +38,8 @@ import {
   MemberInviteRequestSchema,
   MemberUpdateRequestSchema,
   MemberDeleteResponseSchema,
+  ChatMessageCreateRequestSchema,
+  MessagesResponseSchema,
 } from "./schemas.js";
 
 export type Role = z.infer<typeof RoleSchema>;
@@ -47,7 +51,11 @@ export type XY = z.infer<typeof XYSchema>;
 export type NodeDTO = z.infer<typeof NodeDTOSchema>;
 export type EdgeDTO = z.infer<typeof EdgeDTOSchema>;
 export type CanvasSnapshot = z.infer<typeof CanvasSnapshotSchema>;
+export type CanvasSaveRequest = z.infer<typeof CanvasSaveRequestSchema>;
+export type CanvasSaveResponse = z.infer<typeof CanvasSaveResponseSchema>;
 export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
+export type ChatMessageCreateRequest = z.infer<typeof ChatMessageCreateRequestSchema>;
+export type MessagesResponse = z.infer<typeof MessagesResponseSchema>;
 export type ActivityDTO = z.infer<typeof ActivityDTOSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 export type UserRef = z.infer<typeof UserRefSchema>;

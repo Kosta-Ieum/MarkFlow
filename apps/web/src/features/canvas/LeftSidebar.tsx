@@ -2,8 +2,19 @@
 import { useReactFlow } from "@xyflow/react";
 import { Link } from "react-router-dom";
 
+import { canEdit, ROLE_LABEL } from "../../lib/permissions";
 import { useCanvasStore } from "../../store/canvasStore";
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from "./constants";
+
+// 프로젝트 목록으로 나가는 명확한 아이콘(뒤로가기 화살표) — 예전엔 브랜드 사각형(장식처럼 보임)과
+// 프로젝트명 자체가 링크였는데, 둘 다 "나가기"로 안 읽혀 헷갈린다는 피드백을 반영한다.
+function ExitToProjectsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export interface LeftSidebarNode {
   id: string;
@@ -22,6 +33,8 @@ interface LeftSidebarProps {
 export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCount, nodes }: LeftSidebarProps) {
   const width = expanded ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH;
   const projectName = useCanvasStore((s) => s.projectName);
+  const role = useCanvasStore((s) => s.role);
+  const readOnly = role !== null && !canEdit(role);
   const selectedNodeId = useCanvasStore((s) => s.nodes.find((n) => n.selected)?.id);
   const selectNode = useCanvasStore((s) => s.selectNode);
   const { fitView } = useReactFlow();
@@ -33,27 +46,42 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
 
   return (
     <aside
-      className="flex h-full flex-col border-r border-line bg-surface transition-[width] duration-150"
+      // relative + z-30: 캔버스 위 타인 커서 오버레이(z-20, CursorOverlay)보다 쌓임 순서를
+      // 높여, 캔버스를 팬해서 커서가 이 영역까지 넘어오면 사이드바 아래로 가려지게 한다.
+      className="relative z-30 flex h-full flex-col border-r border-line bg-surface transition-[width] duration-150"
       style={{ width }}
     >
       {expanded ? (
         <>
           <div className="flex items-center justify-between gap-2 border-b border-line p-3">
-            <Link to="/projects" aria-label="프로젝트 리스트로" className="shrink-0">
-              <span className="grid h-7 w-7 place-items-center rounded-[28%] bg-ink" aria-hidden />
-            </Link>
             <Link
               to="/projects"
-              className="flex-1 truncate rounded-md px-1.5 py-1 text-left text-sm font-medium text-ink hover:bg-canvas"
+              aria-label="프로젝트 목록으로 나가기"
+              title="프로젝트 목록으로 나가기"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
             >
-              <span className="block truncate">{projectName ?? `프로젝트 ${projectId}`}</span>
-              <span className="text-xs text-muted">노드 {nodeCount}개</span>
+              <ExitToProjectsIcon />
             </Link>
+            <div className="min-w-0 flex-1 px-1 py-1">
+              <span className="block truncate text-sm font-medium text-ink">
+                {projectName ?? `프로젝트 ${projectId}`}
+              </span>
+              <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+                {role && (
+                  <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-secondary">
+                    {ROLE_LABEL.get(role)}
+                  </span>
+                )}
+                <span>노드 {nodeCount}개</span>
+              </span>
+            </div>
             <button
               type="button"
               aria-label="노드 추가"
               onClick={onAddNode}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+              disabled={readOnly}
+              title={readOnly ? "뷰어는 편집할 수 없습니다" : undefined}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
             >
               +
             </button>
@@ -92,13 +120,20 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
           </div>
 
           <div className="border-t border-line p-3 text-[11px] leading-relaxed text-muted">
-            드래그로 노드를 옮기고, 더블클릭으로 편집, 휴지통으로 끌어다 놓으면 삭제됩니다.
+            {readOnly
+              ? "뷰어 권한 — 캔버스를 보기만 할 수 있어요(이동·편집·삭제 불가)."
+              : "드래그로 노드를 옮기고, 더블클릭으로 편집, 휴지통으로 끌어다 놓으면 삭제됩니다."}
           </div>
         </>
       ) : (
         <div className="flex h-full flex-col items-center gap-3 py-3">
-          <Link to="/projects" aria-label="프로젝트 리스트로">
-            <span className="grid h-7 w-7 place-items-center rounded-[28%] bg-ink" aria-hidden />
+          <Link
+            to="/projects"
+            aria-label="프로젝트 목록으로 나가기"
+            title="프로젝트 목록으로 나가기"
+            className="grid h-7 w-7 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+          >
+            <ExitToProjectsIcon />
           </Link>
           <button
             type="button"
@@ -112,7 +147,9 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
             type="button"
             aria-label="노드 추가"
             onClick={onAddNode}
-            className="grid h-7 w-7 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+            disabled={readOnly}
+            title={readOnly ? "뷰어는 편집할 수 없습니다" : undefined}
+            className="grid h-7 w-7 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
             +
           </button>

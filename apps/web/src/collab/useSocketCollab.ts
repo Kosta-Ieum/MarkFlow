@@ -30,10 +30,19 @@ export function useSocketCollab(projectId: string): CollabAPI {
   const socketRef = useRef<Socket | null>(null);
   const lastCursorAtRef = useRef(0);
   const lockedNodeIdRef = useRef<string | null>(null);
+  const unloadHandlerRef = useRef<(() => void) | null>(null);
+
+  const teardownUnloadHandler = () => {
+    if (unloadHandlerRef.current) {
+      window.removeEventListener("pagehide", unloadHandlerRef.current);
+      unloadHandlerRef.current = null;
+    }
+  };
 
   // 컴포넌트가 사라지면 무조건 정리 — connect()를 안 불렀어도 안전.
   useEffect(() => {
     return () => {
+      teardownUnloadHandler();
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
@@ -49,6 +58,21 @@ export function useSocketCollab(projectId: string): CollabAPI {
     socketRef.current = socket;
 
     socket.emit(SOCKET_EVENTS.syncJoin, { projectId: pid });
+
+    // 노드 편집 중 탭을 그냥 닫거나 새로고침하면(라우트 이동이 아니라 페이지 이탈) React
+    // 언마운트 클린업이 못 돌아 소프트락이 그 사람 걸로 영원히 남는다 — pagehide는 탭이
+    // 닫히거나 다른 페이지로 이동할 때 신뢰성 있게 발생하므로, 여기서 마지막으로
+    // 락 해제 + 연결 종료(퇴장 알림)를 강제로 내보낸다.
+    const handlePageHide = () => {
+      if (lockedNodeIdRef.current) {
+        socket.emit(SOCKET_EVENTS.lockRelease, { projectId: pid, nodeId: lockedNodeIdRef.current });
+        lockedNodeIdRef.current = null;
+      }
+      socket.disconnect();
+    };
+    teardownUnloadHandler();
+    window.addEventListener("pagehide", handlePageHide);
+    unloadHandlerRef.current = handlePageHide;
 
     const applySnapshot = (snapshot: CanvasSnapshot) => {
       useCanvasStore.getState().applyRemoteSnapshot(snapshot.nodes, snapshot.edges);
@@ -79,6 +103,9 @@ export function useSocketCollab(projectId: string): CollabAPI {
     });
     socket.on(SOCKET_EVENTS.presenceUpdate, (payload: PresenceUpdatePayload) => {
       usePresenceStore.getState().setOnlineUsers(payload.users);
+      // 나간 사람의 커서·락이 화면에 그대로 남던 문제 — 접속자 명단이 갱신될 때마다
+      // 이제 명단에 없는 유저의 잔여 커서/락을 정리한다(정상 퇴장이든 비정상 종료든 동일하게 적용).
+      usePresenceStore.getState().pruneOffline(payload.users.map((u) => u.id));
     });
     socket.on(SOCKET_EVENTS.lockUpdate, (payload: LockUpdatePayload) => {
       usePresenceStore.getState().setLock(payload.nodeId, payload.userId);
@@ -94,6 +121,7 @@ export function useSocketCollab(projectId: string): CollabAPI {
   };
 
   const disconnect: CollabAPI["disconnect"] = () => {
+    teardownUnloadHandler();
     socketRef.current?.disconnect();
     socketRef.current = null;
     usePresenceStore.getState().clear();

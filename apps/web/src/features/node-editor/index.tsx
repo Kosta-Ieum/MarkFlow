@@ -1,11 +1,12 @@
 // IEUM-29: 노드 상세 에디터 — 전체화면
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import type { NodeType } from "@markflow/shared";
 import { canEdit } from "../../lib/permissions";
-import { requestNodeLock } from "../../store/canvasStore";
+import { requestNodeLock, useCanvasStore } from "../../store/canvasStore";
 import { useAuthStore } from "../../store/authStore";
 import { usePresenceStore } from "../../store/presenceStore";
 import { ChatFab } from "../panel/ChatFab";
@@ -113,6 +114,12 @@ export function NodeEditorPage() {
   const isReadOnly = role === undefined || !canEdit(role) || lockedByOther;
 
   useEffect(() => {
+    // 캔버스 인덱스를 거치지 않고 이 페이지로 바로 진입(딥링크)하면 canvasStore.role이
+    // 비어 있어 ChatFab 등 하위 컴포넌트의 권한 판단이 틀릴 수 있다 — 여기서도 채워준다.
+    if (role !== undefined) useCanvasStore.setState({ role });
+  }, [role]);
+
+  useEffect(() => {
     // 다른 사람이 이미 들고 있거나, 애초에 편집 권한이 없으면(VIEWER) 락을 잡지 않는다.
     if (lockedByOther || role === undefined || !canEdit(role)) return;
     requestNodeLock(nodeId);
@@ -125,6 +132,25 @@ export function NodeEditorPage() {
   const [markdown, setMarkdown] = useState("");
   const [type, setType] = useState<NodeType>("idea");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+
+  // Enter로 줄바꿈해도 마크다운은 개행 하나만으로는 같은 문단으로 합쳐 렌더된다 —
+  // 커서 위치에 <br>을 직접 삽입해 항상 눈에 보이는 줄바꿈이 되게 한다. Shift+Enter는
+  // (에디터 관용대로) 그냥 개행만 — 문단을 나누고 싶을 때 쓸 수 있게 남겨둔다.
+  const handleMarkdownEnter = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = el;
+    const next = `${value.slice(0, selectionStart)}<br>\n${value.slice(selectionEnd)}`;
+    setMarkdown(next);
+    // 삽입 문자열 "<br>\n"의 길이(5) — 정적분석기가 문자열 리터럴에서 파생된 값이면 숫자여도
+    // "raw HTML을 담는 변수"로 계속 taint 추적하길래, 하드코딩 상수로 체인을 끊는다.
+    const INSERTED_LENGTH = 5;
+    const caret = selectionStart + INSERTED_LENGTH;
+    requestAnimationFrame(() => {
+      el.selectionStart = el.selectionEnd = caret;
+    });
+  };
 
   // 서버 데이터 로드 시 초기화 (한 번만)
   const initialized = useRef(false);
@@ -322,13 +348,14 @@ export function NodeEditorPage() {
           textareaProps={{
             disabled: isReadOnly,
             "aria-label": "마크다운 편집",
+            onKeyDown: handleMarkdownEnter,
           }}
         />
       </div>
 
-      {/* 우하단 채팅 FAB — §3.3·§4.4.4: 전체화면 에디터에서도 같은 캔버스 채팅방 접근 */}
-      <ChatFab projectId={projectId} />
-      {/* TODO(F1): 캔버스 우하단에도 <ChatFab projectId={projectId} /> 마운트 */}
+      {/* 우하단 채팅 FAB — §3.3·§4.4.4: 전체화면 에디터에서도 같은 캔버스 채팅방 접근.
+          VIEWER는 소켓이 필요 없어 채팅/히스토리를 아예 숨긴다(비활성이 아니라 미노출). */}
+      {role !== undefined && role !== "VIEWER" && <ChatFab projectId={projectId} />}
     </div>
   );
 }

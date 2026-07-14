@@ -157,7 +157,6 @@ export class AuthService {
     await this.prisma.emailVerification.delete({ where: { id: record.id } });
     return true;
   }
-
   private async issueTokenPair(userId: string, email: string): Promise<TokenPair> {
     const accessToken = this.signAccess({ id: userId, email });
     const refreshToken = this.genRefreshToken();

@@ -433,12 +433,12 @@ const socket = io(WS_URL, { auth: { token: accessToken } });
 - 성공 시 `socket.join('project:<projectId>')` + 현재 상태를 `sync:init`으로 응답.
 - `socket.data.role` 캐시(이벤트별 가드에 사용).
 
-응답(S→C) `sync:init`
+응답(S→C) `sync:init` — payload = `CanvasSnapshot`(`packages/shared` 정본, `project+nodes+edges`. presence는 별도 `presence:update` broadcast로 온다 — 아래 참고)
 ```json
 {
-  "nodes": [ { "id": "uuid", "type": "idea", "title": "킥오프", "markdown": "...", "collapsed": true, "position": { "x": 120, "y": 80 } } ],
-  "edges": [ { "id": "uuid", "source": "a", "target": "b" } ],
-  "presence": [ { "userId": "uuid", "name": "임민규", "color": "#10A36B" } ]
+  "project": { "id": "uuid", "name": "킥오프 캔버스", "role": "EDITOR" },
+  "nodes": [ { "id": "uuid", "type": "idea", "title": "킥오프", "markdown": "...", "collapsed": true, "position": { "x": 120, "y": 80 }, "updatedAt": "2026-01-01T00:00:00.000Z" } ],
+  "edges": [ { "id": "uuid", "source": "a", "target": "b" } ]
 }
 ```
 
@@ -470,7 +470,7 @@ const socket = io(WS_URL, { auth: { token: accessToken } });
 | `edge:added/deleted` | 타인의 엣지 변경 |
 | `cursor:move` | 타인 커서 좌표 |
 | `lock:update` | 노드 점유 상태(`{ nodeId, userId, name }` 또는 해제) |
-| `presence:update` | 접속자 목록 변경("N명 접속 중") |
+| `presence:update` | 접속자 목록 변경("N명 접속 중"). payload `{ users: { id, name }[] }`(`packages/shared` `SocketPayloadSchemas` 정본) |
 | `chat:new` / `chat:typing` | 새 메시지 / 입력 중 표시 |
 
 ### 7.4 권한 가드

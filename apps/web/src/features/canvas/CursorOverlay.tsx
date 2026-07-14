@@ -18,6 +18,11 @@ export function CursorOverlay() {
   // clientX/Y와 같은 좌표계) — 부모(캔버스 div)는 사이드바만큼 페이지 원점에서
   // 밀려 있으므로, absolute(부모 기준)가 아니라 fixed(뷰포트 기준)로 앵커링해야
   // 좌표계가 일치한다. 사이드바 접힘/펼침에 따라 어긋나던 버그의 원인.
+  //
+  // 타인 커서가 화면상 사이드바·우측 패널 영역까지 넘어오면(팬 중) 그 아래로 가려져야
+  // 한다 — 좌표를 잘라 숨기는(clip) 대신, 이 오버레이보다 사이드바 쪽 z-index를
+  // 더 높여(LeftSidebar/RightPanel: z-30) 정상적인 쌓임 순서로 덮이게 한다.
+  // 그래서 여기 z-index는 사이드바보다 낮은 값(z-20)을 유지하기만 하면 된다.
   return (
     <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden">
       {Object.entries(cursors)

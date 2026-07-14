@@ -308,6 +308,9 @@ export const db: MockDb = {
 // projects/members만 localStorage + "storage" 이벤트로 다른 탭에 릴레이한다.
 // db.user(로그인 계정)는 탭마다 다른 게 맞으므로 동기화 대상에서 제외.
 const SHARED_STORAGE_KEY = "markflow-mock-shared-db";
+// 다른 탭에서 storage 이벤트로 db가 갱신됐음을 앱(React Query)에 알리는 커스텀 이벤트명.
+// db.ts는 React Query를 모르므로, 구독은 앱 쪽(useMockSync 등)에서 한다.
+export const MOCK_DB_UPDATED_EVENT = "markflow-mock-db-updated";
 
 interface SharedSnapshot {
   projects: ProjectRecord[];
@@ -387,6 +390,7 @@ window.addEventListener("storage", (e) => {
     db.projects = snapshot.projects;
     db.members = snapshot.members;
     db.knownUsers = { ...db.knownUsers, ...snapshot.knownUsers };
+    window.dispatchEvent(new CustomEvent(MOCK_DB_UPDATED_EVENT));
   } catch {
     // 무시 — 다음 변이에서 다시 맞춰진다.
   }
