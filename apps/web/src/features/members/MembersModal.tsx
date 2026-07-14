@@ -76,7 +76,7 @@ function MemberRow({ projectId, member }: MemberRowProps) {
     <li className="flex flex-col gap-1 border-b border-line-sub py-3 last:border-b-0">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-ink">{member.name}</p>
+          <p className="truncate text-sm font-medium text-ink">{member.nickname ?? member.name}</p>
           <p className="truncate text-xs text-muted">{member.email}</p>
         </div>
 
@@ -86,7 +86,7 @@ function MemberRow({ projectId, member }: MemberRowProps) {
           ) : (
             <>
               <label className="sr-only" htmlFor={`role-${member.userId}`}>
-                {member.name} 역할
+                {member.nickname ?? member.name} 역할
               </label>
               <select
                 id={`role-${member.userId}`}
