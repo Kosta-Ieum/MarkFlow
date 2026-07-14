@@ -96,7 +96,7 @@ export class ActivityService {
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor = hasMore ? page[page.length - 1]!.id : null;
+    const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
 
     const labels = await this.resolveLabels(page);
 
