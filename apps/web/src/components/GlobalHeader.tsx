@@ -28,19 +28,23 @@ function UserMenu() {
 
   const goProfile = () => {
     setOpen(false);
-    void navigate("/profile");
+    navigate("/profile");
   };
 
   const handleLogout = () => {
     setOpen(false);
-    void logout().then(() => navigate("/"));
+    void logout().then(() => {
+      navigate("/");
+    });
   };
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen((v) => !v);
+        }}
         className="grid h-7 w-7 place-items-center rounded-full bg-brand text-xs font-semibold text-white"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -84,7 +88,9 @@ export function GlobalHeader() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-  const goHome = () => navigate(isAuthenticated ? "/projects" : "/");
+  const goHome = () => {
+    navigate(isAuthenticated ? "/projects" : "/");
+  };
 
   return (
     <header
