@@ -105,7 +105,7 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
   function waitForConnect(client: ClientSocket): Promise<void> {
     return new Promise((resolve, reject) => {
       client.on("connect", () => { resolve(); });
-      client.on("connect_error", (err) => { reject(err instanceof Error ? err : new Error(String(err))); });
+      client.on("connect_error", (err: unknown) => { reject(err instanceof Error ? err : new Error(String(err))); });
     });
   }
 

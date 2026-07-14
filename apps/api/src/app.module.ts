@@ -14,9 +14,11 @@ import { ChatModule } from "./modules/chat/chat.module.js";
 import { ActivityModule } from "./modules/activity/activity.module.js";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
 import { RealtimeModule } from "./realtime/realtime.module.js";
+import { EventsModule } from "./common/events/events.module.js";
 
 @Module({
   imports: [
+    EventsModule,
     PrismaModule,
     JwtModule.register({
       global: true,

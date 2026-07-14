@@ -9,6 +9,7 @@ import type {
   NodeDeleteResponse,
   NodeRestoreResponse,
 } from "./node.dto.js";
+import { ProjectEventsService } from "../../common/events/project-events.service.js";
 
 interface NodeRow {
   id: string;
@@ -35,18 +36,23 @@ function toNodeDTO(node: NodeRow): NodeDTO {
 
 @Injectable()
 export class NodeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: ProjectEventsService,
+  ) {}
 
   async create(
     projectId: string,
     userId: string,
     dto: NodeCreateRequest,
+    forcedId?: string,
   ): Promise<NodeDTO> {
     await assertPermission(this.prisma, projectId, userId, "EDITOR");
 
     const node = await this.prisma.$transaction(async (tx) => {
       const created = await tx.node.create({
         data: {
+          id: forcedId,
           projectId,
           title: dto.title,
           markdown: dto.markdown,
@@ -90,9 +96,7 @@ export class NodeService {
       return toNodeDTO(existing);
     }
 
-    const isMoveOnly =
-      changedKeys.length === 1 && changedKeys[0] === "position";
-    const action = isMoveOnly ? "MOVE" : "UPDATE";
+
 
     const node = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.node.update({
@@ -109,15 +113,17 @@ export class NodeService {
         },
       });
 
-      await tx.activityLog.create({
-        data: {
-          projectId,
-          userId,
-          targetType: "NODE",
-          targetId: nodeId,
-          action,
-        },
-      });
+      if (dto.markdown !== undefined) {
+        await tx.activityLog.create({
+          data: {
+            projectId,
+            userId,
+            targetType: "NODE",
+            targetId: nodeId,
+            action: "UPDATE",
+          },
+        });
+      }
 
       return updated;
     });
@@ -160,6 +166,12 @@ export class NodeService {
       return updated;
     });
 
+    this.events.emit({
+      projectId,
+      type: "NODE_DELETED",
+      payload: { nodeId: node.id },
+    });
+
     return { id: node.id, deletedAt: node.deletedAt!.toISOString() };
   }
 
@@ -194,6 +206,12 @@ export class NodeService {
       return updated;
     });
 
+    this.events.emit({
+      projectId,
+      type: "NODE_RESTORED",
+      payload: { node: toNodeDTO(node) },
+    });
+
     return { id: node.id, deletedAt: node.deletedAt?.toISOString() ?? null };
   }
 
@@ -214,6 +232,12 @@ export class NodeService {
 
     // ActivityLog는 불변 보존 — targetId 댕글링 허용, 과거 로그는 지우지 않는다.
     await this.prisma.node.delete({ where: { id: nodeId } });
+
+    this.events.emit({
+      projectId,
+      type: "NODE_PURGED",
+      payload: { nodeId },
+    });
 
     return { id: nodeId, purged: true };
   }

@@ -6,6 +6,8 @@ import { MemberInviteRequestSchema, MemberUpdateRequestSchema } from "@markflow/
 import type { MemberInviteRequest, MemberUpdateRequest } from "@markflow/shared";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe.js";
 import type { Role } from "@prisma/client";
+import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
+import type { JwtPayload } from "../../common/guards/jwt-auth.guard.js";
 
 @UseGuards(ProjectRoleGuard)
 @Controller("projects/:projectId/members")
@@ -14,8 +16,11 @@ export class MemberController {
 
   @RequireRole("VIEWER")
   @Get()
-  async getMembers(@Param("projectId") projectId: string) {
-    const members = await this.memberService.getMembers(projectId);
+  async getMembers(
+    @Param("projectId") projectId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const members = await this.memberService.getMembers(projectId, user.sub);
     return { members };
   }
 
@@ -23,9 +28,10 @@ export class MemberController {
   @Post()
   async inviteMember(
     @Param("projectId") projectId: string,
+    @CurrentUser() user: JwtPayload,
     @Body(new ZodValidationPipe(MemberInviteRequestSchema)) dto: MemberInviteRequest,
   ) {
-    await this.memberService.inviteMember(projectId, dto.email, dto.role as Role);
+    await this.memberService.inviteMember(projectId, user.sub, dto.email, dto.role as Role);
     return { success: true };
   }
 
@@ -34,9 +40,10 @@ export class MemberController {
   async updateMemberRole(
     @Param("projectId") projectId: string,
     @Param("userId") userId: string,
+    @CurrentUser() user: JwtPayload,
     @Body(new ZodValidationPipe(MemberUpdateRequestSchema)) dto: MemberUpdateRequest,
   ) {
-    await this.memberService.updateMemberRole(projectId, userId, dto.role as Role);
+    await this.memberService.updateMemberRole(projectId, user.sub, userId, dto.role as Role);
     return { success: true };
   }
 
@@ -45,8 +52,9 @@ export class MemberController {
   async removeMember(
     @Param("projectId") projectId: string,
     @Param("userId") userId: string,
+    @CurrentUser() user: JwtPayload,
   ) {
-    const result = await this.memberService.removeMember(projectId, userId);
+    const result = await this.memberService.removeMember(projectId, user.sub, userId);
     return result;
   }
 }

@@ -10,6 +10,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
+import type { OnModuleInit } from "@nestjs/common";
 import type { Server, Socket } from "socket.io";
 import { SOCKET_EVENTS, roomOf } from "@markflow/shared";
 import { env } from "../config/env.js";
@@ -23,6 +24,8 @@ import { PresenceService } from "./presence.js";
 import { WsJwtGuard } from "./ws-jwt.guard.js";
 import { SubscribeWithValidation } from "./decorators.js";
 import { WsExceptionAckFilter } from "../common/filters/ws-exception.filter.js";
+import { ProjectEventsService } from "../common/events/project-events.service.js";
+import { Prisma } from "@prisma/client";
 
 type AckResponse =
   | { ok: true; data?: unknown }
@@ -36,7 +39,7 @@ type AckResponse =
 })
 @UseFilters(new WsExceptionAckFilter())
 @Injectable()
-export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleInit {
   @WebSocketServer()
   server!: Server;
 
@@ -47,6 +50,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     @Inject(NodeService) private readonly nodeService: NodeService,
     @Inject(EdgeService) private readonly edgeService: EdgeService,
     @Inject(PresenceService) private readonly presenceService: PresenceService,
+    @Inject(ProjectEventsService) private readonly events: ProjectEventsService,
   ) {}
 
   afterInit(server: Server): void {
@@ -57,6 +61,60 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
         .then(() => { next(); })
         .catch(() => { next(new Error("UNAUTHORIZED")); });
     });
+  }
+
+  onModuleInit() {
+    this.events.events$.subscribe(async (event) => {
+      const room = roomOf(event.projectId);
+
+      if (event.type === "NODE_RESTORED") {
+        this.broadcastExcept(room, event.triggerUserId, SOCKET_EVENTS.nodeAdd, {
+          projectId: event.projectId,
+          node: event.payload.node,
+        });
+      } else if (event.type === "NODE_DELETED") {
+        this.broadcastExcept(room, event.triggerUserId, SOCKET_EVENTS.nodeDelete, {
+          projectId: event.projectId,
+          nodeId: event.payload.nodeId,
+        });
+      } else if (event.type === "NODE_PURGED") {
+        this.broadcastExcept(room, event.triggerUserId, SOCKET_EVENTS.nodeDelete, {
+          projectId: event.projectId,
+          nodeId: event.payload.nodeId,
+        });
+      } else if (event.type === "MEMBER_REMOVED" || event.type === "MEMBER_ROLE_CHANGED") {
+        // Find the user's socket and kick them / release their locks
+        const sockets = await this.server.in(room).fetchSockets();
+        const targetUserId = event.payload.userId;
+        const newRole = event.payload.role;
+
+        for (const s of sockets) {
+          if (s.data.userId === targetUserId) {
+            if (event.type === "MEMBER_REMOVED" || (event.type === "MEMBER_ROLE_CHANGED" && newRole === "VIEWER")) {
+              // Release all locks held by this socket
+              const { releasedLocks } = this.presenceService.removeSocketFromAll(s.id);
+              for (const lock of releasedLocks) {
+                this.server.to(roomOf(lock.projectId)).emit(SOCKET_EVENTS.lockUpdate, { nodeId: lock.nodeId, userId: null });
+              }
+              // If removed or downgraded to VIEWER, they can't stay in collab room
+              if (event.type === "MEMBER_REMOVED") {
+                 s.leave(room);
+                 s.disconnect(true);
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  private async broadcastExcept(room: string, excludeUserId: string | undefined, event: string, payload: any) {
+    const sockets = await this.server.in(room).fetchSockets();
+    for (const s of sockets) {
+      if (s.data.userId !== excludeUserId) {
+        s.emit(event, payload);
+      }
+    }
   }
 
   @UseGuards(WsJwtGuard)
@@ -95,9 +153,17 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
       position: node.position,
     };
 
-    const created = await this.nodeService.create(projectId, userId, dto);
-    this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeAdd, { projectId, node: created });
-    return { ok: true, data: { node: created } };
+    try {
+      const created = await this.nodeService.create(projectId, userId, dto, node.id);
+      socket.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeAdd, { projectId, node: created });
+      return { ok: true, data: { node: created } };
+    } catch (e: any) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        // Duplicate ID from applyLocalRestoreNode or duplicate emit. Ignore.
+        return { ok: false, error: { code: "CONFLICT", message: "Node already exists." } };
+      }
+      throw e;
+    }
   }
 
   @UseGuards(WsJwtGuard)
@@ -115,7 +181,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     };
 
     const updated = await this.nodeService.update(projectId, userId, node.id, dto);
-    this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeUpdate, { projectId, node: updated });
+    socket.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeUpdate, { projectId, node: updated });
     return { ok: true, data: { node: updated } };
   }
 
@@ -126,7 +192,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     const userId = socket.data.userId as string;
 
     const result = await this.nodeService.softDelete(projectId, userId, nodeId);
-    this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeDelete, { projectId, nodeId: result.id });
+    socket.to(roomOf(projectId)).emit(SOCKET_EVENTS.nodeDelete, { projectId, nodeId: result.id });
     return { ok: true, data: result };
   }
 
@@ -139,7 +205,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     const dto: EdgeCreateRequest = { source: edge.source, target: edge.target };
 
     const created = await this.edgeService.createEdge(projectId, userId, dto);
-    this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeAdd, { projectId, edge: created });
+    socket.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeAdd, { projectId, edge: created });
     return { ok: true, data: { edge: created } };
   }
 
@@ -150,7 +216,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect {
     const userId = socket.data.userId as string;
 
     const result = await this.edgeService.deleteEdge(projectId, userId, edgeId);
-    this.server.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeDelete, { projectId, edgeId: result.id });
+    socket.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeDelete, { projectId, edgeId: result.id });
     return { ok: true, data: result };
   }
 
