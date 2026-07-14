@@ -12,7 +12,7 @@ interface RightPanelProps {
 }
 
 const EXPANDED_WIDTH = 340; // ChatPanel 자체 폭(w-[340px])과 맞춤
-const COLLAPSED_WIDTH = 84;
+const COLLAPSED_WIDTH = 42; // 접혔을 때 폭이 애매하게 넓다는 피드백 — 기존(84)의 절반
 
 export function RightPanel({ projectId, expanded, onToggle }: RightPanelProps) {
   // 패널이 접혀있는 동안 도착한 새 메시지 수 추적(ChatFab과 같은 패턴) — chatStore.messages는
@@ -45,15 +45,17 @@ export function RightPanel({ projectId, expanded, onToggle }: RightPanelProps) {
 
   return (
     <aside
-      className="flex h-full flex-col border-l border-line bg-surface transition-[width] duration-150"
+      // relative + z-30: CursorOverlay(z-20)보다 위로 — 팬 중인 타인 커서가 이 영역으로
+      // 넘어오면 패널 아래로 가려지게 한다.
+      className="relative z-30 flex h-full flex-col border-l border-line bg-surface transition-[width] duration-150"
       style={{ width: COLLAPSED_WIDTH }}
     >
-      <div className="flex items-center justify-between border-b border-line p-3">
+      <div className="flex items-center justify-center border-b border-line py-3">
         <button
           type="button"
           aria-label="패널 펼치기"
           onClick={onToggle}
-          className="relative ml-auto grid h-7 w-7 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
+          className="relative grid h-7 w-7 place-items-center rounded-md text-secondary hover:bg-canvas hover:text-ink"
         >
           «
           {unreadCount > 0 && (

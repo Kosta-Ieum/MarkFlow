@@ -21,7 +21,7 @@ import { CursorOverlay } from "./CursorOverlay";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
 import { MarkdownNodeCard } from "./MarkdownNodeCard";
-import { RightPanel } from "./RightPanel";
+import { RightPanel, RIGHT_PANEL_EXPANDED_WIDTH } from "./RightPanel";
 import { seedEdges, seedNodes } from "./seedNodes";
 import { TrashPanel } from "./TrashPanel";
 import { ZoomControls } from "./ZoomControls";
@@ -89,13 +89,26 @@ function CanvasSurface({
 
   // 멀티커서 렌더링(IEUM-35) 전이라도 emit 배선은 여기서 끝내둔다 — 커서 throttle(≈50ms)은
   // useSocketCollab 안에서 처리하므로 여기선 그냥 매 mousemove마다 호출해도 된다.
-  const handlePointerMove = (e: React.MouseEvent) => {
-    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    emitCursorPosition(flowPos);
-  };
+  //
+  // 캔버스 div의 onPointerMove가 아니라 window 리스너로 잡는다 — 실제 마우스가 사이드바
+  // 위로 넘어가면(사이드바 z-index가 더 높아 그 지점의 이벤트 타깃이 됨) div 핸들러는
+  // 더 이상 안 불려서 위치 전송이 사이드바 경계에서 멈춰버렸다(다른 탭에서 커서가 거기서
+  // 멈춘 것처럼 보임). window 레벨에서 받으면 타깃이 무엇이든 버블링으로 항상 잡히므로,
+  // 실제 마우스는 계속 추적하고 화면에 가려지는지는 오직 각자 화면의 z-index로만 결정된다.
+  const screenToFlowPositionRef = useRef(screenToFlowPosition);
+  screenToFlowPositionRef.current = screenToFlowPosition;
+
+  useEffect(() => {
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      const flowPos = screenToFlowPositionRef.current({ x: e.clientX, y: e.clientY });
+      emitCursorPosition(flowPos);
+    };
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    return () => window.removeEventListener("pointermove", handleWindowPointerMove);
+  }, []);
 
   return (
-    <div className="relative h-full flex-1" onPointerMove={handlePointerMove}>
+    <div className="relative h-full flex-1">
       <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
         {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
       </div>
@@ -172,7 +185,7 @@ export function CanvasPage() {
         <CanvasSurface
           leftSidebarExpanded={leftExpanded}
           rightPanelExpanded={rightExpanded}
-          rightPanelOffset={340}
+          rightPanelOffset={RIGHT_PANEL_EXPANDED_WIDTH}
         />
         {/* VIEWER는 소켓이 필요 없다 — 채팅/히스토리도 실시간 계약 위에 있으므로 아예 숨긴다(회색 비활성이 아니라 미노출). */}
         {role !== "VIEWER" && (

@@ -45,7 +45,9 @@ export function ChatPanel({ projectId, onCollapse }: ChatPanelProps) {
 
   return (
     <aside
-      className="flex h-full w-[340px] flex-col border-l border-line bg-white animate-mfpop"
+      // relative + z-30: CursorOverlay(z-20)보다 위로 — 팬 중인 타인 커서가 이 영역으로
+      // 넘어오면 패널 아래로 가려지게 한다.
+      className="relative z-30 flex h-full w-[340px] flex-col border-l border-line bg-white animate-mfpop"
       aria-label="팀 채팅 및 히스토리 패널"
     >
       <div className="flex items-center justify-between border-b border-line px-2" role="tablist">

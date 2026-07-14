@@ -112,7 +112,8 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
         {collapsed ? (
           <p className="mt-1 truncate font-mono text-xs text-muted">{getPreviewLine(markdown)}</p>
         ) : (
-          <div className="mt-1.5 max-h-48 overflow-y-auto text-xs text-secondary [&_pre]:bg-code-bg [&_pre]:text-code-fg">
+          // 스크롤로 감춰지면 접힌 것과 다를 게 없다는 피드백 — 높이 제한 없이 전부 펼쳐 보여준다.
+          <div className="mt-1.5 text-xs text-secondary [&_pre]:bg-code-bg [&_pre]:text-code-fg">
             <MDEditor.Markdown source={markdown || "*내용 없음*"} />
           </div>
         )}

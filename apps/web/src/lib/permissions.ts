@@ -7,3 +7,10 @@ export const canEdit = (role: Role): boolean => role === "OWNER" || role === "ED
 
 /** OWNER 전용 — 프로젝트 rename·삭제·멤버 관리 등 소유자 전용 동작 */
 export const canManage = (role: Role): boolean => role === "OWNER";
+
+/** 역할 한글 표시 라벨 — MembersModal의 배지 라벨과 동일하게 맞춘다. */
+export const ROLE_LABEL: Record<Role, string> = {
+  OWNER: "소유자",
+  EDITOR: "편집자",
+  VIEWER: "뷰어",
+};
