@@ -6,6 +6,7 @@ import type {
   AuthResponse,
   RefreshResponse,
   User,
+  UpdateProfileRequest,
   ProjectsResponse,
   ProjectSummary,
   ProjectUpdateResponse,
@@ -40,6 +41,9 @@ import {
   listTrashedNodes,
   addMessage,
   loginAs,
+  updateOwnProfile,
+  hasMockSession,
+  clearMockSession,
   issueToken,
   generateCode,
   verifyCode,
@@ -86,9 +90,10 @@ export const handlers = [
       name: string;
       email: string;
       password: string;
+      nickname: string;
     }>;
     if (!body.email) return badRequest("email이 필요합니다.");
-    const { user, accessToken } = loginAs(body.email, body.name);
+    const { user, accessToken } = loginAs(body.email, body.name, body.nickname);
     const res: AuthResponse = { accessToken, user };
     return HttpResponse.json(res, { status: 201 });
   }),
@@ -113,13 +118,33 @@ export const handlers = [
 
   http.post(url("/auth/refresh"), async () => {
     await delay(LATENCY_MS);
+    // 실서버는 refresh 쿠키를 검증 — mock은 "이 탭에서 로그인했는가"로 대용.
+    if (!hasMockSession()) {
+      const body: ErrorResponse = {
+        error: { code: "UNAUTHORIZED", message: "세션이 없습니다.", details: null },
+      };
+      return HttpResponse.json(body, { status: 401 });
+    }
     const res: RefreshResponse = { accessToken: issueToken(db.user.id) };
     return HttpResponse.json(res, { status: 200 });
   }),
 
   http.post(url("/auth/logout"), async () => {
     await delay(LATENCY_MS);
+    clearMockSession();
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // 프로필 표시명 변경 (PATCH /users/me — 계약: UpdateProfileRequest → User)
+  http.patch(url("/users/me"), async ({ request }) => {
+    await delay(LATENCY_MS);
+    const body = (await request.json().catch(() => ({}))) as Partial<UpdateProfileRequest>;
+    const nickname = body.nickname?.trim();
+    if (!nickname || nickname.length < 2 || nickname.length > 20) {
+      return badRequest("nickname은 2~20자여야 합니다.");
+    }
+    const user = updateOwnProfile(nickname);
+    return HttpResponse.json(user, { status: 200 });
   }),
 
   // ── Email OTP (mock 전용 — TODO(계약): openapi /auth/email/* 추가 시 삭제) ──────

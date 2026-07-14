@@ -70,6 +70,8 @@ interface MockDb {
   members: Record<string, Member[]>;
   /** email → 회원가입 시 입력한 이름. 로그인(이름 없이)할 때 이걸로 복원한다. */
   knownUsers: Record<string, string>;
+  /** email → 회원가입 시 입력한 nickname. 로그인 시 복원한다. */
+  knownNicknames: Record<string, string>;
 }
 
 // ── 시드 데이터 ──────────────────────────────────────────────────────────────
@@ -78,13 +80,14 @@ const demoUser: User = {
   id: DEMO_USER_ID,
   email: "demo@markflow.app",
   name: "데모 사용자",
+  nickname: "데모지기",
 };
 
 // 시드 시점 작성자(고정). 런타임 변이는 currentUserRef()로 현재 user를 반영.
-const userRef = { id: demoUser.id, name: demoUser.name };
+const userRef = { id: demoUser.id, name: demoUser.name, nickname: demoUser.nickname };
 
-function currentUserRef(): { id: string; name: string } {
-  return { id: db.user.id, name: db.user.name };
+function currentUserRef(): { id: string; name: string; nickname?: string | null } {
+  return { id: db.user.id, name: db.user.name, nickname: db.user.nickname };
 }
 
 function seedNodes(): NodeDTO[] {
@@ -239,6 +242,7 @@ function seedMembers(ownerRole: Role): Member[] {
     name: demoUser.name,
     email: demoUser.email,
     role: "OWNER",
+    nickname: demoUser.nickname,
   };
   if (ownerRole === "OWNER") {
     return [
@@ -248,12 +252,15 @@ function seedMembers(ownerRole: Role): Member[] {
         name: "editor",
         email: "editor@markflow.app",
         role: "EDITOR",
+        nickname: "에디터",
       },
       {
         userId: uuid(),
         name: "viewer",
         email: "viewer@markflow.app",
         role: "VIEWER",
+        // nickname 미설정 — R6.2 `nickname ?? name` fallback 확인용(→ "viewer" 표시).
+        nickname: null,
       },
     ];
   }
@@ -264,12 +271,14 @@ function seedMembers(ownerRole: Role): Member[] {
       name: "alice",
       email: "alice@markflow.app",
       role: "OWNER",
+      nickname: "앨리스",
     },
     {
       userId: DEMO_USER_ID,
       name: demoUser.name,
       email: demoUser.email,
       role: ownerRole,
+      nickname: demoUser.nickname,
     },
   ];
 }
@@ -291,6 +300,7 @@ export const db: MockDb = {
     [PROJECT_RESEARCH_ID]: seedMembers("VIEWER"),
   },
   knownUsers: { [demoUser.email]: demoUser.name },
+  knownNicknames: { [demoUser.email]: "데모지기" },
 };
 
 // ── 탭 간 동기화 ─────────────────────────────────────────────────────────────
@@ -303,10 +313,16 @@ interface SharedSnapshot {
   projects: ProjectRecord[];
   members: Record<string, Member[]>;
   knownUsers: Record<string, string>;
+  knownNicknames: Record<string, string>;
 }
 
 function persistShared(): void {
-  const snapshot: SharedSnapshot = { projects: db.projects, members: db.members, knownUsers: db.knownUsers };
+  const snapshot: SharedSnapshot = {
+    projects: db.projects,
+    members: db.members,
+    knownUsers: db.knownUsers,
+    knownNicknames: db.knownNicknames,
+  };
   localStorage.setItem(SHARED_STORAGE_KEY, JSON.stringify(snapshot));
 }
 
@@ -318,6 +334,7 @@ function hydrateFromStorage(): boolean {
     db.projects = snapshot.projects;
     db.members = snapshot.members;
     db.knownUsers = { ...db.knownUsers, ...snapshot.knownUsers };
+    db.knownNicknames = { ...db.knownNicknames, ...(snapshot.knownNicknames ?? {}) };
     return true;
   } catch {
     return false;
@@ -351,6 +368,17 @@ function hydrateUserFromStorage(): void {
 }
 
 hydrateUserFromStorage();
+
+/** mock 세션 존재 여부 = 이 탭에서 로그인한 적 있는가(실서버 refresh 쿠키 대용). */
+export function hasMockSession(): boolean {
+  return sessionStorage.getItem(USER_STORAGE_KEY) !== null;
+}
+
+/** 로그아웃 — mock 세션 제거(다음 /auth/refresh는 401) + user 시드로 리셋. */
+export function clearMockSession(): void {
+  sessionStorage.removeItem(USER_STORAGE_KEY);
+  db.user = demoUser;
+}
 
 window.addEventListener("storage", (e) => {
   if (e.key !== SHARED_STORAGE_KEY || !e.newValue) return;
@@ -614,20 +642,36 @@ function prependActivity(
 }
 
 /** 로그인/회원가입 시 입력 email로 데모 user를 갱신하고 토큰을 발급한다. */
-export function loginAs(email: string, name?: string): { user: User; accessToken: string } {
+export function loginAs(
+  email: string,
+  name?: string,
+  nickname?: string,
+): { user: User; accessToken: string } {
   // 회원가입(name 있음)은 knownUsers에 등록해둔다. 로그인(name 없음)은 항상 이전
   // db.user.name(보통 시드 "데모 사용자")을 그대로 썼었다 — 그래서 어느 계정으로
   // 로그인해도 닉네임이 항상 "데모 사용자"였다. knownUsers에 가입 시 이름이 있으면
   // 그걸 쓰고, 전혀 모르는 이메일이면 그제서야 local-part로 폴백한다.
+  // nickname도 가입 시 입력값을 knownNicknames에 등록 → 로그인 시 복원.
   if (name) db.knownUsers[email] = name;
+  if (nickname) db.knownNicknames[email] = nickname;
   db.user = {
     ...db.user,
     email,
     name: name ?? db.knownUsers[email] ?? email.split("@")[0],
+    nickname: nickname ?? db.knownNicknames[email] ?? null,
   };
   persistUser();
   persistShared();
   return { user: db.user, accessToken: issueToken(db.user.id) };
+}
+
+/** 프로필 표시명(nickname) 변경 — PATCH /users/me. */
+export function updateOwnProfile(nickname: string): User {
+  db.user = { ...db.user, nickname };
+  db.knownNicknames[db.user.email] = nickname;
+  persistUser();
+  persistShared();
+  return db.user;
 }
 
 // ── Members 셀렉터·변이 ───────────────────────────────────────────────────────

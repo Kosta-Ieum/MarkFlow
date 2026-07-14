@@ -13,11 +13,13 @@ import {
   ChatMessageDTOSchema,
   ActivityDTOSchema,
   ErrorResponseSchema,
+  UserRefSchema,
   UserSchema,
   SignupRequestSchema,
   LoginRequestSchema,
   AuthResponseSchema,
   RefreshResponseSchema,
+  UpdateProfileRequestSchema,
   SendCodeRequestSchema,
   SendCodeResponseSchema,
   VerifyEmailRequestSchema,
@@ -48,6 +50,7 @@ export type CanvasSnapshot = z.infer<typeof CanvasSnapshotSchema>;
 export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
 export type ActivityDTO = z.infer<typeof ActivityDTOSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+export type UserRef = z.infer<typeof UserRefSchema>;
 
 // Auth types
 export type User = z.infer<typeof UserSchema>;
@@ -55,6 +58,7 @@ export type SignupRequest = z.infer<typeof SignupRequestSchema>;
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 export type RefreshResponse = z.infer<typeof RefreshResponseSchema>;
+export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 export type SendCodeRequest = z.infer<typeof SendCodeRequestSchema>;
 export type SendCodeResponse = z.infer<typeof SendCodeResponseSchema>;
 export type VerifyEmailRequest = z.infer<typeof VerifyEmailRequestSchema>;

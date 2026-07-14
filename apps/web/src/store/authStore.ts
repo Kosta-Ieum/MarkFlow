@@ -20,7 +20,7 @@ interface AuthState {
   clearAuth: () => void;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -74,12 +74,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
   },
 
-  signup: async (name, email, password) => {
+  signup: async (name, email, password, nickname) => {
     set({ isLoading: true, error: null });
     try {
       const data = await api<AuthResponse>("/auth/signup", {
         method: "POST",
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, nickname }),
       });
       if (!data) throw new Error("응답 데이터가 없습니다.");
       get().setAuth(data.accessToken, data.user);
