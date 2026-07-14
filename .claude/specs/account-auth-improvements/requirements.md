@@ -120,3 +120,11 @@ created: 2026-07-14
 - R8.3 WHEN "로그아웃"을 선택하면, THE SYSTEM SHALL R2의 로그아웃 흐름을 수행한다.
 - R8.4 WHEN 메뉴 바깥을 클릭하거나 항목을 선택하면, THE SYSTEM SHALL 메뉴를 닫는다.
 - R8.5 THE SYSTEM SHALL 아바타/메뉴에 표시되는 이름을 `nickname ?? name`으로 렌더한다.
+
+### R9. 인증 사용자의 로그인/가입 화면 접근 차단 — F2
+
+**유저스토리:** 이미 로그인한 사용자로서, 로그인/가입 화면을 다시 보지 않기 위해, 접근 시 앱 내부로 리다이렉트되기를 원한다.
+
+**인수 조건:**
+- R9.1 WHEN 인증된 사용자가 `/login` 또는 `/signup`에 접근하면, THE SYSTEM SHALL `/projects`로 리다이렉트한다.
+- R9.2 WHILE 부팅 refresh가 진행 중이면, THE SYSTEM SHALL 인증 판단이 끝날 때까지 리다이렉트/폼 노출을 보류한다(로그인 폼 깜빡임 방지).

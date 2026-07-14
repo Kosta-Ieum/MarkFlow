@@ -62,4 +62,18 @@ test.describe("계정/인증 개선 스모크", () => {
     await expect(page.getByLabel("닉네임")).toBeVisible();
     await expect(page.getByLabel("이름")).toBeVisible();
   });
+
+  test("로그인 상태에서 /login·/signup 접근 시 /projects로 리다이렉트 (R9)", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("이메일").fill(DEMO_EMAIL);
+    await page.getByLabel("비밀번호").fill("whatever123");
+    await page.getByRole("button", { name: "로그인" }).click();
+    await expect(page).toHaveURL(/\/projects/);
+
+    // 이미 로그인됨 → 로그인/가입 화면 재접근 시 앱 내부로 리다이렉트
+    await page.goto("/login");
+    await expect(page).toHaveURL(/\/projects/);
+    await page.goto("/signup");
+    await expect(page).toHaveURL(/\/projects/);
+  });
 });

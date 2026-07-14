@@ -16,19 +16,37 @@ interface ProtectedRouteProps {
   children: ReactElement;
 }
 
+// 부팅 refresh 진행 중 공통 로딩.
+function BootLoading() {
+  return (
+    <div
+      className="flex min-h-[60vh] items-center justify-center text-muted"
+      role="status"
+      aria-live="polite"
+    >
+      불러오는 중…
+    </div>
+  );
+}
+
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   // 부팅 refresh 완료 전에는 판단 보류 — 새로고침 시 /login 깜빡임 방지(R1.4).
-  if (isBootstrapping) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-muted" role="status" aria-live="polite">
-        불러오는 중…
-      </div>
-    );
-  }
+  if (isBootstrapping) return <BootLoading />;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+// 인증된 사용자가 /login·/signup에 접근하면 /projects로 리다이렉트(로그인 화면 노출 방지, R9).
+export function PublicOnlyRoute({ children }: ProtectedRouteProps) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
+  if (isBootstrapping) return <BootLoading />;
+  if (isAuthenticated) {
+    return <Navigate to="/projects" replace />;
   }
   return children;
 }
@@ -38,8 +56,22 @@ export function AppRoutes() {
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<AuthPage mode="login" />} />
-        <Route path="/signup" element={<AuthPage mode="signup" />} />
+        <Route
+          path="/login"
+          element={
+            <PublicOnlyRoute>
+              <AuthPage mode="login" />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <PublicOnlyRoute>
+              <AuthPage mode="signup" />
+            </PublicOnlyRoute>
+          }
+        />
         <Route
           path="/projects"
           element={
