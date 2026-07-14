@@ -17,6 +17,15 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
+  // 부팅 refresh 완료 전에는 판단 보류 — 새로고침 시 /login 깜빡임 방지(R1.4).
+  if (isBootstrapping) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted" role="status" aria-live="polite">
+        불러오는 중…
+      </div>
+    );
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
