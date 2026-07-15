@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Inject, Injectable } from "@nestjs/commo
 import { JwtService } from "@nestjs/jwt";
 import type { Socket } from "socket.io";
 import type { JwtPayload } from "../common/guards/jwt-auth.guard.js";
+import { PrismaService } from "../prisma/prisma.service.js";
 
 // WS용 JWT 검증. 두 가지 역할:
 // 1) verifyHandshake — 연결(handshake) 시 1회 신원 검증. Gateway.afterInit의 server.use() 미들웨어에서 호출.
@@ -12,7 +13,10 @@ import type { JwtPayload } from "../common/guards/jwt-auth.guard.js";
 export class WsJwtGuard implements CanActivate {
   // esbuild/vitest 런타임에선 emitDecoratorMetadata가 신뢰할 수 없어 암시적 타입 기반 DI가
   // 조용히 실패할 수 있다(app.module.ts의 JwtAuthGuard useFactory와 동일 이유) — @Inject로 명시.
-  constructor(@Inject(JwtService) private readonly jwt: JwtService) {}
+  constructor(
+    @Inject(JwtService) private readonly jwt: JwtService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+  ) {}
 
   async verifyHandshake(socket: Socket): Promise<string> {
     const token = (socket.handshake.auth as { token?: string }).token;
@@ -27,6 +31,16 @@ export class WsJwtGuard implements CanActivate {
 
     socket.data.userId = payload.sub;
     socket.data.email = payload.email;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { name: true, nickname: true },
+    });
+    if (user) {
+      socket.data.name = user.name;
+      socket.data.nickname = user.nickname;
+    }
+
     return payload.sub;
   }
 
