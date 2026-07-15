@@ -131,9 +131,12 @@ function CanvasSurface({
 
   return (
     <div className="relative h-full flex-1">
-      <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
-        {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
-      </div>
+      {/* VIEWER는 편집 자체를 못 하니 저장 상태 표시가 의미 없다 — 뷰어에겐 아예 숨긴다. */}
+      {!readOnly && (
+        <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
+          {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
+        </div>
+      )}
       <ReactFlow
         nodes={renderNodes}
         edges={edges}
