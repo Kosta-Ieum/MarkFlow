@@ -129,9 +129,39 @@ export class CanvasService {
 
     // DTO에 있는 노드/엣지들의 ID 목록
     const nodeIds = dto.nodes.map((n) => n.id);
-    const edgeIds = dto.edges.map((e) => e.id);
+    
+    if (nodeIds.length > 0) {
+      const otherProjectNodesCount = await this.prisma.node.count({
+        where: {
+          id: { in: nodeIds },
+          projectId: { not: projectId },
+        },
+      });
+      if (otherProjectNodesCount > 0) {
+        throw AppException.forbidden("타 프로젝트의 자원은 수정할 수 없습니다");
+      }
+    }
+
+    // 존재하는 노드만 가리키는 엣지만 필터링하여 P2003 500 에러 원천 차단
+    const validNodeIds = new Set(nodeIds);
+    const validEdges = dto.edges.filter((e) => validNodeIds.has(e.source) && validNodeIds.has(e.target));
+    const edgeIds = validEdges.map((e) => e.id);
 
     await this.prisma.$transaction(async (tx) => {
+      // 0. IDOR 방지: 요청받은 노드/엣지 중 타 프로젝트 소속이 있는지 검사
+      if (nodeIds.length > 0) {
+        const existingNodes = await tx.node.findMany({ where: { id: { in: nodeIds } }, select: { id: true, projectId: true } });
+        if (existingNodes.some((n) => n.projectId !== projectId)) {
+          throw AppException.forbidden("타 프로젝트의 노드는 수정할 수 없습니다.");
+        }
+      }
+      if (edgeIds.length > 0) {
+        const existingEdges = await tx.edge.findMany({ where: { id: { in: edgeIds } }, select: { id: true, projectId: true } });
+        if (existingEdges.some((e) => e.projectId !== projectId)) {
+          throw AppException.forbidden("타 프로젝트의 엣지는 수정할 수 없습니다.");
+        }
+      }
+
       // 1. 기존 활성 노드 중 DTO에 없는 것 삭제 (물리 삭제)
       // *주의: 삭제된 노드(deletedAt != null)는 유지해야 하므로 deletedAt: null 조건 추가
       if (nodeIds.length > 0) {
@@ -193,7 +223,7 @@ export class CanvasService {
       }
 
       // 4. 엣지 삽입 또는 업데이트
-      for (const edge of dto.edges) {
+      for (const edge of validEdges) {
         await tx.edge.upsert({
           where: { id: edge.id },
           update: {

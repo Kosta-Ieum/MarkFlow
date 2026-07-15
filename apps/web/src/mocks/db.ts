@@ -392,6 +392,11 @@ export function clearMockSession(): void {
   db.user = demoUser;
 }
 
+/** mock: 이미 가입된 이메일인가(가입 시 knownUsers에 등록됨). 실서버 이메일 중복 검사 대용. */
+export function isRegisteredEmail(email: string): boolean {
+  return email in db.knownUsers;
+}
+
 window.addEventListener("storage", (e) => {
   if (e.key !== SHARED_STORAGE_KEY || !e.newValue) return;
   try {

@@ -3,7 +3,9 @@ import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { env } from "./config/env.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
+import { PrismaService } from "./prisma/prisma.service.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
+import { UserModule } from "./modules/users/user.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { ProjectModule } from "./modules/projects/project.module.js";
 import { NodeModule } from "./modules/nodes/node.module.js";
@@ -14,9 +16,11 @@ import { ChatModule } from "./modules/chat/chat.module.js";
 import { ActivityModule } from "./modules/activity/activity.module.js";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
 import { RealtimeModule } from "./realtime/realtime.module.js";
+import { EventsModule } from "./common/events/events.module.js";
 
 @Module({
   imports: [
+    EventsModule,
     PrismaModule,
     JwtModule.register({
       global: true,
@@ -25,6 +29,7 @@ import { RealtimeModule } from "./realtime/realtime.module.js";
     }),
     HealthModule,
     AuthModule,
+    UserModule,
     ProjectModule,
     NodeModule,
     EdgeModule,
@@ -41,8 +46,8 @@ import { RealtimeModule } from "./realtime/realtime.module.js";
     // useFactory로 DI 토큰을 명시 — tsx/esm 환경에서 emitDecoratorMetadata 없이도 안전.
     {
       provide: APP_GUARD,
-      useFactory: (jwt: JwtService, reflector: Reflector) => new JwtAuthGuard(jwt, reflector),
-      inject: [JwtService, Reflector],
+      useFactory: (jwt: JwtService, reflector: Reflector, prisma: PrismaService) => new JwtAuthGuard(jwt, reflector, prisma),
+      inject: [JwtService, Reflector, PrismaService],
     },
   ],
 })
