@@ -11,6 +11,7 @@ import { io, type Socket as ClientSocket } from "socket.io-client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { RealtimeModule } from "./realtime.module.js";
+import { EventsModule } from "../common/events/events.module.js";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const MEMBER_USER_ID = "22222222-2222-4222-8222-222222222222";
@@ -60,6 +61,7 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
           secret: JWT_SECRET_KEY,
           signOptions: { expiresIn: "1h" },
         }),
+        EventsModule,
         RealtimeModule,
       ],
     })
@@ -82,7 +84,9 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   function connect(token?: string): ClientSocket {
