@@ -44,11 +44,22 @@ function redirectToLogin(): void {
   }
 }
 
-// 응답이 세션 강제 종료 사유(DUPLICATE_LOGIN 등)를 담고 있으면 로그인 화면 전달용으로 저장.
+// 서버가 세션을 강제 종료한 응답인지 판별 — 전용 코드(DUPLICATE_LOGIN) 또는 과도기의 409+메시지.
+// BE가 현재 "다른 기기 로그인"에 generic CONFLICT 코드를 써서, 전용 코드 도입 전까지 메시지로 보강한다.
+function isSessionEnded(
+  status: number,
+  err: { code?: string; message?: string } | undefined,
+): boolean {
+  if (err?.code === "DUPLICATE_LOGIN") return true;
+  if (status === 409 && err?.message?.includes("다른 기기에서 로그인")) return true;
+  return false;
+}
+
+// 응답이 세션 강제 종료 사유를 담고 있으면 로그인 화면 전달용으로 저장.
 async function captureSessionEndReason(res: Response): Promise<void> {
   try {
     const body = (await res.json()) as ErrorResponse;
-    if (body?.error?.code === "DUPLICATE_LOGIN" && body.error.message) {
+    if (isSessionEnded(res.status, body?.error) && body?.error?.message) {
       stashSessionNotice(body.error.message);
     }
   } catch {
@@ -142,9 +153,9 @@ async function request<T>(
     }
     const err = errorBody?.error;
 
-    // 다른 기기 로그인 등으로 서버가 세션을 강제 종료한 경우 — status 무관, code로 감지해 로그아웃.
-    if (err?.code === "DUPLICATE_LOGIN") {
-      if (err.message) stashSessionNotice(err.message);
+    // 다른 기기 로그인 등으로 서버가 세션을 강제 종료한 경우 로그아웃 — 전용 코드 또는 409+메시지로 감지.
+    if (isSessionEnded(res.status, err)) {
+      if (err?.message) stashSessionNotice(err.message);
       useAuthStore.getState().clearAuth();
       redirectToLogin();
     }

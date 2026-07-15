@@ -14,7 +14,6 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import { Public } from "../../common/decorators/public.decorator.js";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe.js";
 import { AppException } from "../../common/app.exception.js";
-import { env } from "../../config/env.js";
 import {
  
   LoginRequestSchema,
@@ -35,8 +34,8 @@ const REFRESH_COOKIE = "refresh_token";
 function setRefreshCookie(res: Response, pair: TokenPair): void {
   res.cookie(REFRESH_COOKIE, pair.refreshToken, {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: true,
+    sameSite: "none",
     expires: pair.refreshExpiresAt,
     path: "/",
   });
@@ -45,8 +44,8 @@ function setRefreshCookie(res: Response, pair: TokenPair): void {
 function clearRefreshCookie(res: Response): void {
   res.clearCookie(REFRESH_COOKIE, {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: true,
+    sameSite: "none",
     path: "/",
   });
 }
@@ -87,9 +86,17 @@ export class AuthController {
   ) {
     const oldToken = (req.cookies as Record<string, string>)[REFRESH_COOKIE];
     if (!oldToken) throw AppException.unauthorized("리프레시 토큰이 없습니다");
-    const { response, tokenPair } = await this.authService.refresh(oldToken);
-    setRefreshCookie(res, tokenPair);
-    return response;
+    
+    try {
+      const { response, tokenPair } = await this.authService.refresh(oldToken);
+      setRefreshCookie(res, tokenPair);
+      return response;
+    } catch (err: any) {
+      if (err instanceof AppException && err.getStatus() === 409) {
+        clearRefreshCookie(res);
+      }
+      throw err;
+    }
   }
 
   @Post("logout")

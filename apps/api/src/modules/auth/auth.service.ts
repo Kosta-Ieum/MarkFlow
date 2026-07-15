@@ -34,10 +34,12 @@ export class AuthService {
     private readonly events: ProjectEventsService,
   ) {
     if (env.SMTP_USER && env.SMTP_PASS) {
+      const port = Number(process.env.SMTP_PORT) || 587;
       this.transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port,
+        secure: port === 465, // 465는 무조건 SSL, 587은 STARTTLS(secure: false)
+        connectionTimeout: 5000, // 최대 5초 대기 후 타임아웃
         auth: {
           user: env.SMTP_USER,
           pass: env.SMTP_PASS,
@@ -126,6 +128,9 @@ export class AuthService {
       throw AppException.conflict("이미 가입된 이메일입니다.");
     }
 
+    // 기존 인증 코드가 있더라도 삭제하고 새 코드로 덮어씌우도록 쿨타임 제한을 해제했습니다.
+    // (재전송 시 바로 새 코드가 발급됩니다)
+
     const code = randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
 
@@ -140,6 +145,8 @@ export class AuthService {
     }
 
     try {
+      // 발송 결과를 기다려(await) 잘못된 이메일 주소 등에 대한 에러를 즉시 감지합니다.
+      // 포트 변경(587) 및 타임아웃(5초) 설정으로 인해 더 이상 2분간 무한 지연되지 않습니다.
       await this.transporter.sendMail({
         from: `"MarkFlow" <${env.SMTP_USER}>`,
         to: email,
@@ -148,8 +155,8 @@ export class AuthService {
       });
       return true;
     } catch (err) {
-      console.error("[Email Error]", err);
-      throw AppException.internal("이메일 발송에 실패했습니다");
+      console.error("[Email Sync Error]", err);
+      throw AppException.internal("이메일 발송에 실패했습니다. 이메일 주소를 확인해주세요.");
     }
   }
 
