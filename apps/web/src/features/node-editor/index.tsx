@@ -103,9 +103,11 @@ export function NodeEditorPage() {
   const role = snapshot?.project.role;
   const myId = useAuthStore((s) => s.user?.id);
   const lockedBy = usePresenceStore((s) => s.locks[nodeId]);
-  const lockerName = usePresenceStore((s) =>
-    lockedBy ? s.onlineUsers.find((u) => u.id === lockedBy)?.name : undefined,
-  );
+  const lockerName = usePresenceStore((s) => {
+    if (!lockedBy) return undefined;
+    const u = s.onlineUsers.find((u) => u.id === lockedBy);
+    return u?.nickname ?? u?.name;
+  });
   const lockedByOther = !!lockedBy && lockedBy !== myId;
   // role 미확정(로딩 중)이거나 다른 사람이 이 노드를 락 중이면 읽기 전용으로 방어.
   // canEdit는 OWNER|EDITOR. — 캔버스 카드 더블클릭 가드(handleEnterEdit)는 진입 전

@@ -8,6 +8,8 @@ import { create } from "zustand";
 interface PresenceUser {
   id: string;
   name: string;
+  /** 공개 표시명 — 커서·접속자·락 배지는 nickname ?? name으로 표기(백필 전 null이면 name 폴백). */
+  nickname?: string | null;
 }
 
 interface PresenceState {

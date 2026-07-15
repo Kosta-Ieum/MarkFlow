@@ -36,17 +36,20 @@ function PresenceSection() {
         <p className="text-xs text-muted">접속자가 없습니다.</p>
       ) : (
         <ul className="flex flex-wrap gap-1.5" aria-label="접속자 목록">
-          {onlineUsers.map((user) => (
-            <li key={user.id}>
-              <span
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-surface text-xs font-semibold text-ink ring-1 ring-line"
-                title={user.name}
-                aria-label={user.name}
-              >
-                {initialOf(user.name)}
-              </span>
-            </li>
-          ))}
+          {onlineUsers.map((user) => {
+            const label = user.nickname ?? user.name;
+            return (
+              <li key={user.id}>
+                <span
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-surface text-xs font-semibold text-ink ring-1 ring-line"
+                  title={label}
+                  aria-label={label}
+                >
+                  {initialOf(label)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
