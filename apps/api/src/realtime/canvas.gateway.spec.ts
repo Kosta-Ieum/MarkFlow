@@ -41,6 +41,12 @@ function makeMockPrisma() {
         edges: [],
       })),
     },
+    user: {
+      findUnique: vi.fn(async () => ({
+        name: "Test User",
+        nickname: "testnick",
+      })),
+    },
   };
 }
 

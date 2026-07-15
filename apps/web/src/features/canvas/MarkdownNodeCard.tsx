@@ -52,9 +52,11 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
   const navigate = useNavigate();
   const myId = useAuthStore((s) => s.user?.id);
   const lockedBy = usePresenceStore((s) => s.locks[id]);
-  const lockerName = usePresenceStore((s) =>
-    lockedBy ? s.onlineUsers.find((u) => u.id === lockedBy)?.name : undefined,
-  );
+  const lockerName = usePresenceStore((s) => {
+    if (!lockedBy) return undefined;
+    const u = s.onlineUsers.find((u) => u.id === lockedBy);
+    return u?.nickname ?? u?.name;
+  });
   const lockedByOther = !!lockedBy && lockedBy !== myId;
 
   const handleToggle = (e: MouseEvent) => {

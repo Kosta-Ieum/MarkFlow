@@ -113,6 +113,17 @@ export const handlers = [
 
   http.get(url("/auth/me"), async () => {
     await delay(LATENCY_MS);
+    // 테스트 훅: 다른 기기 로그인 시뮬레이션 — 플래그 있으면 실서버처럼 409(세션 강제 종료).
+    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("markflow-mock-duplicate-login")) {
+      const errBody: ErrorResponse = {
+        error: {
+          code: "CONFLICT",
+          message: "다른 기기에서 로그인되어 세션이 만료되었습니다.",
+          details: null,
+        },
+      };
+      return HttpResponse.json(errBody, { status: 409 });
+    }
     const me: User = db.user;
     return HttpResponse.json(me, { status: 200 });
   }),

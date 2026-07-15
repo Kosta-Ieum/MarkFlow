@@ -86,9 +86,17 @@ export class AuthController {
   ) {
     const oldToken = (req.cookies as Record<string, string>)[REFRESH_COOKIE];
     if (!oldToken) throw AppException.unauthorized("리프레시 토큰이 없습니다");
-    const { response, tokenPair } = await this.authService.refresh(oldToken);
-    setRefreshCookie(res, tokenPair);
-    return response;
+    
+    try {
+      const { response, tokenPair } = await this.authService.refresh(oldToken);
+      setRefreshCookie(res, tokenPair);
+      return response;
+    } catch (err: any) {
+      if (err instanceof AppException && err.getStatus() === 409) {
+        clearRefreshCookie(res);
+      }
+      throw err;
+    }
   }
 
   @Post("logout")
