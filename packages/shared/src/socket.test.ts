@@ -49,4 +49,11 @@ describe("SocketPayloadSchemas", () => {
     expect(schema.safeParse({ projectId: UUID, userId: UUID, position: { x: 0, y: 0 } }).success).toBe(true);
     expect(schema.safeParse({ projectId: UUID, userId: UUID, position: { x: 0 } }).success).toBe(false);
   });
+
+  it("presence:update는 {id,name} 유저 목록을 검증한다", () => {
+    const schema = SocketPayloadSchemas[SOCKET_EVENTS.presenceUpdate];
+    expect(schema.safeParse({ users: [{ id: UUID, name: "임민규" }] }).success).toBe(true);
+    expect(schema.safeParse({ users: [{ id: UUID }] }).success).toBe(false);
+    expect(schema.safeParse({ users: [] }).success).toBe(true);
+  });
 });

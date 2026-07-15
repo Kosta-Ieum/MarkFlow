@@ -10,14 +10,18 @@ import {
   NodeDTOSchema,
   EdgeDTOSchema,
   CanvasSnapshotSchema,
+  CanvasSaveRequestSchema,
+  CanvasSaveResponseSchema,
   ChatMessageDTOSchema,
   ActivityDTOSchema,
   ErrorResponseSchema,
+  UserRefSchema,
   UserSchema,
   SignupRequestSchema,
   LoginRequestSchema,
   AuthResponseSchema,
   RefreshResponseSchema,
+  UpdateProfileRequestSchema,
   SendCodeRequestSchema,
   SendCodeResponseSchema,
   VerifyEmailRequestSchema,
@@ -34,6 +38,8 @@ import {
   MemberInviteRequestSchema,
   MemberUpdateRequestSchema,
   MemberDeleteResponseSchema,
+  ChatMessageCreateRequestSchema,
+  MessagesResponseSchema,
 } from "./schemas.js";
 
 export type Role = z.infer<typeof RoleSchema>;
@@ -45,9 +51,14 @@ export type XY = z.infer<typeof XYSchema>;
 export type NodeDTO = z.infer<typeof NodeDTOSchema>;
 export type EdgeDTO = z.infer<typeof EdgeDTOSchema>;
 export type CanvasSnapshot = z.infer<typeof CanvasSnapshotSchema>;
+export type CanvasSaveRequest = z.infer<typeof CanvasSaveRequestSchema>;
+export type CanvasSaveResponse = z.infer<typeof CanvasSaveResponseSchema>;
 export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
+export type ChatMessageCreateRequest = z.infer<typeof ChatMessageCreateRequestSchema>;
+export type MessagesResponse = z.infer<typeof MessagesResponseSchema>;
 export type ActivityDTO = z.infer<typeof ActivityDTOSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+export type UserRef = z.infer<typeof UserRefSchema>;
 
 // Auth types
 export type User = z.infer<typeof UserSchema>;
@@ -55,6 +66,7 @@ export type SignupRequest = z.infer<typeof SignupRequestSchema>;
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 export type RefreshResponse = z.infer<typeof RefreshResponseSchema>;
+export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 export type SendCodeRequest = z.infer<typeof SendCodeRequestSchema>;
 export type SendCodeResponse = z.infer<typeof SendCodeResponseSchema>;
 export type VerifyEmailRequest = z.infer<typeof VerifyEmailRequestSchema>;

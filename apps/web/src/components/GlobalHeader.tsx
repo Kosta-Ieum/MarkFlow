@@ -1,30 +1,96 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "../store/authStore";
 
 const HEADER_BG = "rgba(246,245,241,.86)";
 
-export function GlobalHeader() {
+// 아바타 클릭 → 프로필 보기·로그아웃 드롭다운(R8). 표시명은 nickname ?? name(R8.5).
+function UserMenu() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  const goHome = () => navigate(isAuthenticated ? "/projects" : "/");
+  const displayName = user?.nickname ?? user?.name ?? "사용자";
+  const initial = displayName.trim().charAt(0).toUpperCase();
+
+  // 바깥 클릭 시 닫기(R8.4).
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const goProfile = () => {
+    setOpen(false);
+    navigate("/profile");
+  };
 
   const handleLogout = () => {
-    // 로그아웃해도 TanStack Query 캐시(프로젝트 목록 등)가 그대로 남아있으면, 같은 탭에서
-    // 다른 계정으로 로그인했을 때 새로고침 전까지 이전 계정 데이터가 그대로 보인다(알파
-    // 테스트에서도 나온 버그) — 계정 전환의 경계인 로그아웃 시점에 전부 비운다.
+    setOpen(false);
     void logout().then(() => {
-      queryClient.clear();
       navigate("/");
     });
   };
 
-  const initial = user?.name?.trim().charAt(0).toUpperCase() ?? "";
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((v) => !v);
+        }}
+        className="grid h-7 w-7 place-items-center rounded-full bg-brand text-xs font-semibold text-white"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`${displayName} 메뉴`}
+      >
+        {initial}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-2 min-w-[168px] overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg"
+        >
+          <div className="border-b border-line px-3 py-2">
+            <p className="truncate text-sm font-medium text-ink">{displayName}</p>
+            {user?.email && <p className="truncate text-xs text-muted">{user.email}</p>}
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={goProfile}
+            className="block w-full px-3 py-2 text-left text-sm text-secondary hover:bg-canvas hover:text-ink"
+          >
+            프로필 보기
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleLogout}
+            className="block w-full px-3 py-2 text-left text-sm text-secondary hover:bg-canvas hover:text-ink"
+          >
+            로그아웃
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function GlobalHeader() {
+  const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  const goHome = () => {
+    navigate(isAuthenticated ? "/projects" : "/");
+  };
 
   return (
     <header
@@ -49,19 +115,7 @@ export function GlobalHeader() {
           <Link to="/projects" className="text-sm text-secondary hover:text-ink">
             프로젝트
           </Link>
-          <span
-            className="grid h-7 w-7 place-items-center rounded-full bg-brand text-xs font-semibold text-white"
-            aria-label={user?.name ?? "사용자"}
-          >
-            {initial}
-          </span>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-md border border-line px-3 py-1.5 text-sm text-secondary hover:text-ink"
-          >
-            로그아웃
-          </button>
+          <UserMenu />
         </nav>
       ) : (
         <nav className="flex items-center gap-3">

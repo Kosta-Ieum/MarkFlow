@@ -6,6 +6,7 @@ import {
   NodeDTOSchema,
   UserSchema,
   SignupRequestSchema,
+  UpdateProfileRequestSchema,
   ProjectCreateRequestSchema,
   ProjectSummarySchema,
   MemberInviteRequestSchema,
@@ -63,10 +64,45 @@ describe("Auth 포맷 제약", () => {
     expect(UserSchema.safeParse({ id: UUID, email: "bad", name: "A" }).success).toBe(false);
   });
 
+  it("UserSchema의 nickname은 선택이며 null·문자열·미포함을 허용한다", () => {
+    const base = { id: UUID, email: "a@b.com", name: "A" };
+    expect(UserSchema.safeParse(base).success).toBe(true); // 미포함(optional)
+    expect(UserSchema.safeParse({ ...base, nickname: null }).success).toBe(true); // null(백필 전)
+    expect(UserSchema.safeParse({ ...base, nickname: "닉" }).success).toBe(true);
+  });
+
   it("SignupRequestSchema는 비밀번호 8자 미만을 거부한다", () => {
-    const ok = { name: "A", email: "a@b.com", password: "12345678" };
+    const ok = { name: "A", email: "a@b.com", password: "12345678", nickname: "홍길동" };
     expect(SignupRequestSchema.safeParse(ok).success).toBe(true);
     expect(SignupRequestSchema.safeParse({ ...ok, password: "1234567" }).success).toBe(false);
+  });
+
+  it("SignupRequestSchema는 nickname을 필수로 요구하고 2~20자로 제한한다", () => {
+    const ok = { name: "A", email: "a@b.com", password: "12345678", nickname: "홍길동" };
+    expect(SignupRequestSchema.safeParse({ name: "A", email: "a@b.com", password: "12345678" }).success).toBe(false); // 미포함
+    expect(SignupRequestSchema.safeParse({ ...ok, nickname: "a" }).success).toBe(false); // 2자 미만
+    expect(SignupRequestSchema.safeParse({ ...ok, nickname: "a".repeat(21) }).success).toBe(false); // 20자 초과
+    expect(SignupRequestSchema.safeParse({ ...ok, nickname: "ab" }).success).toBe(true);
+    expect(SignupRequestSchema.safeParse({ ...ok, nickname: "a".repeat(20) }).success).toBe(true);
+  });
+
+  it("SignupRequestSchema는 nickname 앞뒤 공백을 trim한 뒤 길이를 검증한다", () => {
+    const ok = { name: "A", email: "a@b.com", password: "12345678" };
+    // trim 후 1자 → 거부
+    expect(SignupRequestSchema.safeParse({ ...ok, nickname: "  a  " }).success).toBe(false);
+    // trim 후 "닉네임" 저장되는지
+    const parsed = SignupRequestSchema.safeParse({ ...ok, nickname: "  닉네임  " });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.nickname).toBe("닉네임");
+  });
+
+  it("UpdateProfileRequestSchema는 nickname 2~20자·trim을 검증한다", () => {
+    expect(UpdateProfileRequestSchema.safeParse({ nickname: "ab" }).success).toBe(true);
+    expect(UpdateProfileRequestSchema.safeParse({ nickname: "a" }).success).toBe(false);
+    expect(UpdateProfileRequestSchema.safeParse({ nickname: "a".repeat(21) }).success).toBe(false);
+    const parsed = UpdateProfileRequestSchema.safeParse({ nickname: "  새닉  " });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.nickname).toBe("새닉");
   });
 });
 

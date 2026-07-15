@@ -1,0 +1,3 @@
+---
+exclude_paths:
+  - 'apps/api/prisma/migrations/**'

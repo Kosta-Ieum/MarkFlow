@@ -24,9 +24,11 @@ export const XYSchema = z.object({
   y: z.number(),
 });
 
-const UserRefSchema = z.object({
+export const UserRefSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  // 공개 표시명. 백필 전 데이터·nickname 미join payload 관용 위해 nullable+optional (UI는 nickname ?? name).
+  nickname: z.string().nullable().optional(),
 });
 
 // --- DTO (REST 응답 / 소켓 payload 공용 형태) ---
@@ -56,11 +58,29 @@ export const CanvasSnapshotSchema = z.object({
   edges: z.array(EdgeDTOSchema),
 });
 
+export const CanvasSaveRequestSchema = z.object({
+  nodes: z.array(NodeDTOSchema),
+  edges: z.array(EdgeDTOSchema),
+});
+
+export const CanvasSaveResponseSchema = z.object({
+  savedAt: z.string().datetime(),
+});
+
 export const ChatMessageDTOSchema = z.object({
   id: z.string().uuid(),
   content: z.string(),
   createdAt: z.string().datetime(),
   user: UserRefSchema,
+});
+
+export const ChatMessageCreateRequestSchema = z.object({
+  content: z.string().min(1),
+});
+
+export const MessagesResponseSchema = z.object({
+  messages: z.array(ChatMessageDTOSchema),
+  nextCursor: z.string().nullable(),
 });
 
 export const ActivityDTOSchema = z.object({
@@ -83,17 +103,20 @@ export const ErrorResponseSchema = z.object({
 });
 
 // --- Auth (openapi components/schemas: User, SignupRequest, LoginRequest, AuthResponse, RefreshResponse) ---
-// 주의: 기존 UserRefSchema(id,name 2필드)와 별개 — 이쪽은 email 포함 3필드
+// 주의: 기존 UserRefSchema(id,name)와 별개 — 이쪽은 email 포함. nickname = 공개 표시명(백필 전/미join 관용).
 export const UserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   name: z.string(),
+  nickname: z.string().nullable().optional(),
 });
 
 export const SignupRequestSchema = z.object({
   name: z.string(),
   email: z.string().email(),
   password: z.string().min(8),
+  // 회원가입 시 필수 입력 — 공개 표시명(2~20자, 앞뒤 공백 trim).
+  nickname: z.string().trim().min(2).max(20),
 });
 
 export const LoginRequestSchema = z.object({
@@ -108,6 +131,11 @@ export const AuthResponseSchema = z.object({
 
 export const RefreshResponseSchema = z.object({
   accessToken: z.string(),
+});
+
+// --- Profile (PATCH /users/me — 표시명 변경) ---
+export const UpdateProfileRequestSchema = z.object({
+  nickname: z.string().trim().min(2).max(20),
 });
 
 // --- Email OTP (회원가입 이메일 인증 / openapi: SendCode/VerifyEmail Request·Response) ---
@@ -174,6 +202,7 @@ export const MemberSchema = z.object({
   name: z.string(),
   email: z.string().email(),
   role: RoleSchema,
+  nickname: z.string().nullable().optional(),
 });
 
 export const MembersResponseSchema = z.object({

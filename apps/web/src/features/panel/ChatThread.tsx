@@ -64,7 +64,7 @@ function MessageItem({ message, mine }: MessageItemProps) {
   return (
     <li className={`flex flex-col gap-0.5 ${mine ? "items-end" : "items-start"}`}>
       <div className="flex items-baseline gap-1.5 text-xs text-secondary">
-        <span className="font-medium text-ink">{message.user.name}</span>
+        <span className="font-medium text-ink">{message.user.nickname ?? message.user.name}</span>
         <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
       </div>
       <div
@@ -139,6 +139,7 @@ function MessageComposer() {
           disabled={readOnly}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
+
             if(e.nativeEvent.isComposing) return; // 한글 조합 중에는 submit 방지
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

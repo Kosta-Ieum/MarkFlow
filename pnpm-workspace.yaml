@@ -1,3 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# BE-3.1: vitest+SWC(데코레이터 메타데이터 보존, .swcrc 참고)에 필요한 네이티브 빌드 허용.
+onlyBuiltDependencies:
+  - "@swc/core"
