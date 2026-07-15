@@ -176,8 +176,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
       return { ok: true, data: { node: created } };
     } catch (e: any) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        // Duplicate ID from applyLocalRestoreNode or duplicate emit. Ignore.
-        return { ok: false, error: { code: "CONFLICT", message: "Node already exists." } };
+        throw AppException.conflict("이미 존재하는 노드입니다.");
       }
       throw e;
     }

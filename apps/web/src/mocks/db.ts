@@ -12,6 +12,9 @@ import type {
   Member,
 } from "@markflow/shared";
 
+/* eslint-disable security/detect-object-injection --
+   mock 전용 in-memory store: 대괄호 키는 email·projectId·userId 등 내부 값이라 주입 위험 없음. */
+
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
 
 let idSeq = 0;
@@ -72,6 +75,8 @@ interface MockDb {
   knownUsers: Record<string, string>;
   /** email → 회원가입 시 입력한 nickname. 로그인 시 복원한다. */
   knownNicknames: Record<string, string>;
+  /** email → 안정적 user id(실 BE처럼 계정마다 고유). 계정 전환 캐시 격리 재현용. */
+  knownUserIds: Record<string, string>;
 }
 
 // ── 시드 데이터 ──────────────────────────────────────────────────────────────
@@ -301,6 +306,7 @@ export const db: MockDb = {
   },
   knownUsers: { [demoUser.email]: demoUser.name },
   knownNicknames: { [demoUser.email]: "데모지기" },
+  knownUserIds: { [demoUser.email]: DEMO_USER_ID },
 };
 
 // ── 탭 간 동기화 ─────────────────────────────────────────────────────────────
@@ -317,6 +323,7 @@ interface SharedSnapshot {
   members: Record<string, Member[]>;
   knownUsers: Record<string, string>;
   knownNicknames: Record<string, string>;
+  knownUserIds: Record<string, string>;
 }
 
 function persistShared(): void {
@@ -325,6 +332,7 @@ function persistShared(): void {
     members: db.members,
     knownUsers: db.knownUsers,
     knownNicknames: db.knownNicknames,
+    knownUserIds: db.knownUserIds,
   };
   localStorage.setItem(SHARED_STORAGE_KEY, JSON.stringify(snapshot));
 }
@@ -338,6 +346,7 @@ function hydrateFromStorage(): boolean {
     db.members = snapshot.members;
     db.knownUsers = { ...db.knownUsers, ...snapshot.knownUsers };
     db.knownNicknames = { ...db.knownNicknames, ...(snapshot.knownNicknames ?? {}) };
+    db.knownUserIds = { ...db.knownUserIds, ...(snapshot.knownUserIds ?? {}) };
     return true;
   } catch {
     return false;
@@ -390,6 +399,7 @@ window.addEventListener("storage", (e) => {
     db.projects = snapshot.projects;
     db.members = snapshot.members;
     db.knownUsers = { ...db.knownUsers, ...snapshot.knownUsers };
+    db.knownUserIds = { ...db.knownUserIds, ...(snapshot.knownUserIds ?? {}) };
     window.dispatchEvent(new CustomEvent(MOCK_DB_UPDATED_EVENT));
   } catch {
     // 무시 — 다음 변이에서 다시 맞춰진다.
@@ -658,8 +668,12 @@ export function loginAs(
   // nickname도 가입 시 입력값을 knownNicknames에 등록 → 로그인 시 복원.
   if (name) db.knownUsers[email] = name;
   if (nickname) db.knownNicknames[email] = nickname;
+  // 실 BE처럼 이메일마다 고유·안정 id — 계정 전환 시 db.user.id가 바뀌어야
+  // 프론트의 user 스코프 캐시 키가 격리된다(이전 계정 목록 잔상 방지).
+  const id = db.knownUserIds[email] ?? (db.knownUserIds[email] = uuid());
   db.user = {
     ...db.user,
+    id,
     email,
     name: name ?? db.knownUsers[email] ?? email.split("@")[0],
     nickname: nickname ?? db.knownNicknames[email] ?? null,

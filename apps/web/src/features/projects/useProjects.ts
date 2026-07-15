@@ -10,14 +10,18 @@ import type {
 } from "@markflow/shared";
 import { api } from "../../lib/api";
 import { queryKeys } from "../../lib/queryKeys";
+import { useAuthStore } from "../../store/authStore";
 
 // ── 목록 조회 ─────────────────────────────────────────────────────────────────
 
 export function useProjects() {
+  const userId = useAuthStore((s) => s.user?.id);
   return useQuery({
-    queryKey: queryKeys.projects,
+    // user 스코프 키 — 계정 전환 시 이전 계정 목록이 새 계정에 보이지 않도록.
+    queryKey: queryKeys.projects(userId),
     queryFn: () => api<ProjectsResponse>("/projects"),
     select: (data) => data?.projects ?? [],
+    enabled: !!userId,
   });
 }
 
@@ -25,6 +29,7 @@ export function useProjects() {
 
 export function useCreateProject() {
   const qc = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
     mutationFn: (body: ProjectCreateRequest) =>
       api<ProjectSummary>("/projects", {
@@ -32,7 +37,7 @@ export function useCreateProject() {
         body: JSON.stringify(body),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: queryKeys.projects });
+      await qc.invalidateQueries({ queryKey: queryKeys.projects(userId) });
     },
   });
 }
@@ -46,6 +51,7 @@ interface RenameVariables {
 
 export function useRenameProject() {
   const qc = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
     mutationFn: ({ id, body }: RenameVariables) =>
       api<ProjectUpdateResponse>(`/projects/${id}`, {
@@ -53,7 +59,7 @@ export function useRenameProject() {
         body: JSON.stringify(body),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: queryKeys.projects });
+      await qc.invalidateQueries({ queryKey: queryKeys.projects(userId) });
     },
   });
 }
@@ -62,11 +68,12 @@ export function useRenameProject() {
 
 export function useDeleteProject() {
   const qc = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
     mutationFn: (id: string) =>
       api<ProjectDeleteResponse>(`/projects/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: queryKeys.projects });
+      await qc.invalidateQueries({ queryKey: queryKeys.projects(userId) });
     },
   });
 }
