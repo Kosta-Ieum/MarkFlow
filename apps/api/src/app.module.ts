@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { PrismaService } from "./prisma/prisma.service.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
+import { UserModule } from "./modules/users/user.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { ProjectModule } from "./modules/projects/project.module.js";
 import { NodeModule } from "./modules/nodes/node.module.js";
@@ -28,6 +29,7 @@ import { EventsModule } from "./common/events/events.module.js";
     }),
     HealthModule,
     AuthModule,
+    UserModule,
     ProjectModule,
     NodeModule,
     EdgeModule,
