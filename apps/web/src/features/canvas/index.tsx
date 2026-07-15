@@ -157,7 +157,14 @@ function CanvasSurface({
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#D9D5C9" />
-        <MiniMap pannable zoomable className="!bg-surface !border !border-line" />
+        {/* ZoomControls(bottom-6, 우측 하단 필)와 같은 모서리에 기본 배치돼 서로 겹치던 문제 —
+            미니맵을 그만큼 위로 띄워 자리를 분리한다. */}
+        <MiniMap
+          pannable
+          zoomable
+          className="!bg-surface !border !border-line"
+          style={{ marginBottom: 56 }}
+        />
       </ReactFlow>
       <CursorOverlay />
       <TrashPanel ref={trashRef} isDragOver={isDragOverTrash} />

@@ -14,9 +14,16 @@ import type { ForwardedRef } from "react";
 import MDEditor from "@uiw/react-md-editor";
 
 import { canEdit } from "../../lib/permissions";
+import { useAuthStore } from "../../store/authStore";
 import { useCanvasStore } from "../../store/canvasStore";
 
-const POSITION_STORAGE_KEY = "markflow-trash-pos-v2";
+const POSITION_STORAGE_KEY_PREFIX = "markflow-trash-pos-v2";
+
+// 계정별로 따로 기억해야 한다 — 키에 사용자 id가 안 들어가 있으면 브라우저(로컬스토리지)를
+// 공유하는 모든 계정이 같은 위치를 보게 되고, 계정1이 옮기면 계정2 화면도 같이 옮겨진다.
+function storageKeyFor(userId: string | undefined): string {
+  return `${POSITION_STORAGE_KEY_PREFIX}:${userId ?? "anon"}`;
+}
 
 // 목록 패널 크기 추정치 — 화면 밖으로 잘리는지 판단하는 용도라 정확한 실측값일 필요는 없다.
 const PANEL_WIDTH = 256; // w-64
@@ -43,15 +50,15 @@ function isTrashPos(v: unknown): v is TrashPos {
   return (
     !!v &&
     typeof v === "object" &&
-    typeof (v as TrashPos).bottom === "number" &&
-    typeof (v as TrashPos).offset === "number" &&
+    Number.isFinite((v as TrashPos).bottom) &&
+    Number.isFinite((v as TrashPos).offset) &&
     ((v as TrashPos).anchor === "left" || (v as TrashPos).anchor === "right")
   );
 }
 
-function loadStoredPos(): TrashPos | null {
+function loadStoredPos(storageKey: string): TrashPos | null {
   try {
-    const raw = localStorage.getItem(POSITION_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     return isTrashPos(parsed) ? parsed : null;
@@ -90,7 +97,14 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
 ) {
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [pos, setPos] = useState<TrashPos | null>(loadStoredPos);
+  const myId = useAuthStore((s) => s.user?.id);
+  const storageKey = storageKeyFor(myId);
+  const [pos, setPos] = useState<TrashPos | null>(() => loadStoredPos(storageKey));
+  // 로그인 계정이 바뀌면(로그아웃 후 다른 계정 로그인, 또는 마운트 시점에 아직 인증
+  // 복원 전이었던 경우) 그 계정 몫의 저장값을 다시 읽는다 — 계정별로 위치가 독립적이어야 한다.
+  useLayoutEffect(() => {
+    setPos(loadStoredPos(storageKey));
+  }, [storageKey]);
   const [direction, setDirection] = useState({ openUpward: true, anchorRight: false });
   const trashedNodes = useCanvasStore((s) => s.trashedNodes);
   const applyLocalRestoreNode = useCanvasStore((s) => s.applyLocalRestoreNode);
@@ -183,7 +197,7 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
         ? { bottom: dragPreview.bottom, anchor: "right", offset: containerSize.width - dragPreview.left }
         : { bottom: dragPreview.bottom, anchor: "left", offset: dragPreview.left };
       setPos(next);
-      localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify(next));
     }
     setDragPreview(null);
     dragRef.current = null;
@@ -199,7 +213,7 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
 
   const resetPosition = () => {
     setPos(null);
-    localStorage.removeItem(POSITION_STORAGE_KEY);
+    localStorage.removeItem(storageKey);
   };
 
   return (
