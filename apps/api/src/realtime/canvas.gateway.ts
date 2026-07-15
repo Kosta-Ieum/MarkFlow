@@ -106,11 +106,11 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
         // Find the user's socket and kick them / release their locks
         const sockets = await this.server.in(room).fetchSockets();
         const targetUserId = event.payload.userId;
-        const newRole = event.payload.role;
+
 
         for (const s of sockets) {
           if (s.data.userId === targetUserId) {
-            if (event.type === "MEMBER_REMOVED" || (event.type === "MEMBER_ROLE_CHANGED" && newRole === "VIEWER")) {
+            if (event.type === "MEMBER_REMOVED" || event.type === "MEMBER_ROLE_CHANGED") {
               // Release all locks held by this socket
               const { releasedLocks } = this.presenceService.removeSocketFromAll(s.id);
               for (const lock of releasedLocks) {
