@@ -15,6 +15,47 @@ export class ApiError extends Error {
   }
 }
 
+// 서버가 세션을 강제 종료(다른 기기 로그인 등)했을 때, 로그인 화면에 사유를 전달하기 위한 저장소.
+// 전체 네비게이션(window.location)으로 React 상태가 날아가므로 sessionStorage로 넘긴다.
+const SESSION_NOTICE_KEY = "markflow-session-notice";
+
+function stashSessionNotice(message: string): void {
+  try {
+    sessionStorage.setItem(SESSION_NOTICE_KEY, message);
+  } catch {
+    /* sessionStorage 불가 환경 — 무시 */
+  }
+}
+
+/** 로그인 화면에서 세션 종료 사유를 1회 읽고 지운다. */
+export function takeSessionNotice(): string | null {
+  try {
+    const v = sessionStorage.getItem(SESSION_NOTICE_KEY);
+    if (v !== null) sessionStorage.removeItem(SESSION_NOTICE_KEY);
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+function redirectToLogin(): void {
+  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    window.location.href = "/login";
+  }
+}
+
+// 응답이 세션 강제 종료 사유(DUPLICATE_LOGIN 등)를 담고 있으면 로그인 화면 전달용으로 저장.
+async function captureSessionEndReason(res: Response): Promise<void> {
+  try {
+    const body = (await res.json()) as ErrorResponse;
+    if (body?.error?.code === "DUPLICATE_LOGIN" && body.error.message) {
+      stashSessionNotice(body.error.message);
+    }
+  } catch {
+    /* 바디 없음/파싱 실패 — 무시 */
+  }
+}
+
 // refresh 쿠키로 새 access token을 받는 원시 fetch — 표준 api() 401 처리(clearAuth·리다이렉트)를
 // 우회해 재귀·조기 리다이렉트를 방지한다. 실패(401·네트워크) 시 null.
 async function rawRefresh(): Promise<string | null> {
@@ -23,7 +64,10 @@ async function rawRefresh(): Promise<string | null> {
       method: "POST",
       credentials: "include",
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      await captureSessionEndReason(res); // 다른 기기 로그인 등 사유가 있으면 저장
+      return null;
+    }
     const data = (await res.json()) as { accessToken?: string };
     return data.accessToken ?? null;
   } catch {
@@ -79,11 +123,9 @@ async function request<T>(
         return request<T>(path, init, false);
       }
     }
-    // refresh 불가/실패 → 세션 종료 후 로그인으로(R1.3).
+    // refresh 불가/실패 → 세션 종료 후 로그인으로(R1.3). (DUPLICATE_LOGIN 사유는 rawRefresh가 저장)
     useAuthStore.getState().clearAuth();
-    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
+    redirectToLogin();
     throw new ApiError(401, "UNAUTHORIZED", "인증이 만료되었습니다. 다시 로그인해 주세요.");
   }
 
@@ -99,6 +141,14 @@ async function request<T>(
       // JSON 파싱 실패 시 기본 메시지 사용
     }
     const err = errorBody?.error;
+
+    // 다른 기기 로그인 등으로 서버가 세션을 강제 종료한 경우 — status 무관, code로 감지해 로그아웃.
+    if (err?.code === "DUPLICATE_LOGIN") {
+      if (err.message) stashSessionNotice(err.message);
+      useAuthStore.getState().clearAuth();
+      redirectToLogin();
+    }
+
     throw new ApiError(
       res.status,
       err?.code ?? "UNKNOWN_ERROR",
