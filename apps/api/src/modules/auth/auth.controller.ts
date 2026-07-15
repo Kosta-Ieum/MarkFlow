@@ -92,7 +92,6 @@ export class AuthController {
     return response;
   }
 
-  @Public()
   @Post("logout")
   @HttpCode(200)
   async logout(

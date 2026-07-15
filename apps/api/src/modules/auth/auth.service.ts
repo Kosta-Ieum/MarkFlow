@@ -7,6 +7,7 @@ import { PrismaService } from "../../prisma/prisma.service.js";
 import { AppException } from "../../common/app.exception.js";
 import { env } from "../../config/env.js";
 import { RefreshTokenStore } from "./refresh-token.store.js";
+import { ProjectEventsService } from "../../common/events/project-events.service.js";
 import type { JwtPayload } from "../../common/guards/jwt-auth.guard.js";
 import type {
   SignupRequest,
@@ -30,6 +31,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly refreshStore: RefreshTokenStore,
+    private readonly events: ProjectEventsService,
   ) {
     if (env.SMTP_USER && env.SMTP_PASS) {
       this.transporter = nodemailer.createTransport({
@@ -71,13 +73,25 @@ export class AuthService {
     if (!match) throw AppException.invalidCredentials();
 
     const { passwordHash: _, ...safeUser } = user;
+    
+    // 중복 로그인 방지: 새 기기에서 로그인 시 기존 기기의 모든 세션(토큰) 만료
+    await this.refreshStore.deleteByUser(safeUser.id);
+    this.events.emit({ type: "USER_LOGGED_OUT", payload: { userId: safeUser.id } });
+
     const tokenPair = await this.issueTokenPair(safeUser.id, safeUser.email);
     return { response: { accessToken: tokenPair.accessToken, user: safeUser }, tokenPair };
   }
 
   async refresh(oldRefreshToken: string): Promise<{ response: RefreshResponse; tokenPair: TokenPair }> {
-    const stored = await this.refreshStore.verify(oldRefreshToken);
-    if (!stored) throw AppException.unauthorized("유효하지 않거나 만료된 리프레시 토큰입니다");
+    const rawToken = await this.prisma.refreshToken.findUnique({ where: { token: oldRefreshToken } });
+    
+    // DB에 아예 없으면 -> 중복 로그인(다른 기기 접속)으로 인해 삭제된 것
+    if (!rawToken) throw AppException.conflict("다른 기기에서 로그인되어 세션이 만료되었습니다.");
+    
+    // DB에는 있지만 기한이 지났으면 -> 자연 만료
+    if (rawToken.expiresAt <= new Date()) throw AppException.unauthorized("리프레시 토큰이 만료되었습니다.");
+
+    const stored = rawToken;
 
     const user = await this.prisma.user.findUnique({
       where: { id: stored.userId },
@@ -87,9 +101,9 @@ export class AuthService {
 
     const expiresAt = this.calcRefreshExpiry();
     const newRefreshToken = this.genRefreshToken();
-    await this.refreshStore.rotate(oldRefreshToken, user.id, newRefreshToken, expiresAt);
+    const sessionId = await this.refreshStore.rotate(oldRefreshToken, user.id, newRefreshToken, expiresAt);
 
-    const accessToken = this.signAccess(user);
+    const accessToken = this.signAccess({ id: user.id, email: user.email }, sessionId);
     const tokenPair: TokenPair = { accessToken, refreshToken: newRefreshToken, refreshExpiresAt: expiresAt };
     return { response: { accessToken }, tokenPair };
   }
@@ -158,15 +172,15 @@ export class AuthService {
     return true;
   }
   private async issueTokenPair(userId: string, email: string): Promise<TokenPair> {
-    const accessToken = this.signAccess({ id: userId, email });
     const refreshToken = this.genRefreshToken();
     const expiresAt = this.calcRefreshExpiry();
-    await this.refreshStore.save(userId, refreshToken, expiresAt);
+    const sessionId = await this.refreshStore.save(userId, refreshToken, expiresAt);
+    const accessToken = this.signAccess({ id: userId, email }, sessionId);
     return { accessToken, refreshToken, refreshExpiresAt: expiresAt };
   }
 
-  private signAccess(user: { id: string; email: string }): string {
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+  private signAccess(user: { id: string; email: string }, sessionId?: string): string {
+    const payload: JwtPayload = { sub: user.id, email: user.email, ...(sessionId && { sessionId }) };
     return this.jwt.sign(payload);
   }
 

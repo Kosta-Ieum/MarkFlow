@@ -9,10 +9,11 @@ import { PrismaService } from "../../prisma/prisma.service.js";
 export class RefreshTokenStore {
   constructor(private readonly prisma: PrismaService) {}
 
-  async save(userId: string, token: string, expiresAt: Date): Promise<void> {
-    await this.prisma.refreshToken.create({
+  async save(userId: string, token: string, expiresAt: Date): Promise<string> {
+    const record = await this.prisma.refreshToken.create({
       data: { userId, token, expiresAt },
     });
+    return record.id;
   }
 
   /** 유효(미만료) 토큰 조회. 없으면 null. */
@@ -28,11 +29,12 @@ export class RefreshTokenStore {
     userId: string,
     newToken: string,
     expiresAt: Date,
-  ): Promise<void> {
-    await this.prisma.$transaction([
+  ): Promise<string> {
+    const [_, record] = await this.prisma.$transaction([
       this.prisma.refreshToken.deleteMany({ where: { token: oldToken } }),
       this.prisma.refreshToken.create({ data: { userId, token: newToken, expiresAt } }),
     ]);
+    return record.id;
   }
 
   async delete(token: string): Promise<void> {
