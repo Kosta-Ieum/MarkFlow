@@ -26,6 +26,7 @@ import { SubscribeWithValidation } from "./decorators.js";
 import { WsExceptionAckFilter } from "../common/filters/ws-exception.filter.js";
 import { ProjectEventsService } from "../common/events/project-events.service.js";
 import { Prisma } from "@prisma/client";
+import { AppException } from "../common/app.exception.js";
 
 type AckResponse =
   | { ok: true; data?: unknown }
