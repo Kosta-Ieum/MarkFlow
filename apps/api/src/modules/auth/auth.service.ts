@@ -34,10 +34,12 @@ export class AuthService {
     private readonly events: ProjectEventsService,
   ) {
     if (env.SMTP_USER && env.SMTP_PASS) {
+      const port = Number(process.env.SMTP_PORT) || 587;
       this.transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port,
+        secure: port === 465, // 465는 무조건 SSL, 587은 STARTTLS(secure: false)
+        connectionTimeout: 5000, // 최대 5초 대기 후 타임아웃
         auth: {
           user: env.SMTP_USER,
           pass: env.SMTP_PASS,
@@ -144,21 +146,18 @@ export class AuthService {
     }
 
     try {
-      // SMTP 발송을 비동기(백그라운드)로 처리하여 API 응답(클라이언트)이 지연되지 않도록 합니다.
-      this.transporter
-        .sendMail({
-          from: `"MarkFlow" <${env.SMTP_USER}>`,
-          to: email,
-          subject: "[MarkFlow] 이메일 인증 코드",
-          html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
-        })
-        .catch((err) => {
-          console.error("[Email Async Error]", err);
-        });
+      // 발송 결과를 기다려(await) 잘못된 이메일 주소 등에 대한 에러를 즉시 감지합니다.
+      // 포트 변경(587) 및 타임아웃(5초) 설정으로 인해 더 이상 2분간 무한 지연되지 않습니다.
+      await this.transporter.sendMail({
+        from: `"MarkFlow" <${env.SMTP_USER}>`,
+        to: email,
+        subject: "[MarkFlow] 이메일 인증 코드",
+        html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
+      });
       return true;
     } catch (err) {
-      console.error("[Email Error]", err);
-      throw AppException.internal("이메일 발송 준비에 실패했습니다");
+      console.error("[Email Sync Error]", err);
+      throw AppException.internal("이메일 발송에 실패했습니다. 이메일 주소를 확인해주세요.");
     }
   }
 
