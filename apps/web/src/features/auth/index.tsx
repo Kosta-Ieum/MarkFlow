@@ -125,6 +125,9 @@ interface SignupFormProps {
 
 function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
   const [serverError, setServerError] = useState<string | null>(null);
+  // SMTP 지연·오타 등으로 send-code 응답이 늦어질 때 "처리 중…" 버튼만 보고 있게 두지 않도록,
+  // 3초 넘게 걸리면 안내 문구를 띄운다.
+  const [delayed, setDelayed] = useState(false);
   const {
     register,
     handleSubmit,
@@ -138,6 +141,8 @@ function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
   // 여기(가입 폼)에서 잡아 보여준다(OTP 화면으로 넘어간 뒤 뜨지 않게).
   const handleSignup = handleSubmit(async (data) => {
     setServerError(null);
+    setDelayed(false);
+    const delayTimer = setTimeout(() => setDelayed(true), 3000);
     try {
       await api<SendCodeResponse>("/auth/email/send-code", {
         method: "POST",
@@ -148,6 +153,8 @@ function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
       const message =
         err instanceof Error ? err.message : "인증 코드 전송 중 오류가 발생했습니다.";
       setServerError(message);
+    } finally {
+      clearTimeout(delayTimer);
     }
   });
 
@@ -162,6 +169,11 @@ function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
         >
           {serverError}
         </div>
+      )}
+      {!serverError && delayed && (
+        <p role="status" className="mb-6 text-sm text-muted">
+          이메일 발송이 조금 지연되고 있습니다. 입력하신 이메일 주소가 올바른지 확인해 주세요.
+        </p>
       )}
 
       <div className="flex flex-col gap-4">
@@ -274,6 +286,8 @@ type VerifyCodeForm = Pick<VerifyEmailRequest, "code">;
 function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: VerifyStepProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // SMTP 지연·오타 등으로 send-code 응답이 늦어질 때 안내 문구를 띄우기 위한 상태.
+  const [delayed, setDelayed] = useState(false);
 
   const {
     register,
@@ -286,6 +300,8 @@ function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: Veri
   // 인증 코드는 가입 폼 제출 시 이미 발송됨(중복 이메일이면 거기서 걸러짐). 여기선 재전송만 담당.
   const sendCode = async () => {
     setServerError(null);
+    setDelayed(false);
+    const delayTimer = setTimeout(() => setDelayed(true), 3000);
     try {
       await api<SendCodeResponse>("/auth/email/send-code", {
         method: "POST",
@@ -295,6 +311,8 @@ function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: Veri
       const message =
         err instanceof Error ? err.message : "인증 코드 전송 중 오류가 발생했습니다.";
       setServerError(message);
+    } finally {
+      clearTimeout(delayTimer);
     }
   };
 
@@ -334,6 +352,11 @@ function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: Veri
         >
           {serverError}
         </div>
+      )}
+      {!serverError && delayed && (
+        <p role="status" className="mb-6 text-sm text-muted">
+          이메일 발송이 조금 지연되고 있습니다. 입력하신 이메일 주소가 올바른지 확인해 주세요.
+        </p>
       )}
 
       <p className="mb-6 text-sm text-secondary">

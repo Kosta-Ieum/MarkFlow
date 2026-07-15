@@ -80,8 +80,6 @@ const GRID_STEP_X = NODE_WIDTH + GRID_GAP;
 const GRID_STEP_Y = NODE_HEIGHT_APPROX + GRID_GAP;
 const GRID_COLS = 4;
 const MAX_GRID_SLOTS = 500; // 사실상 도달 안 하는 안전장치
-// 휴지통 복구 노드의 고정 초기 위치 — 삭제 전 좌표가 아니라 항상 이 지점 기준으로 배치한다.
-const RESTORE_ORIGIN: XYPosition = { x: 120, y: 120 };
 // 노드 드래그 허용 범위(flow 좌표계) — 캔버스 바깥으로 완전히 나가 못 찾게 되는 것 방지.
 export const CANVAS_NODE_EXTENT: [[number, number], [number, number]] = [
   [-1000, -1000],
@@ -289,7 +287,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const nonRemove = changes.filter((c) => c.type !== "remove");
     set((state) => ({ edges: applyEdgeChanges(nonRemove, state.edges) }));
     get().scheduleSave();
-    removedIds.forEach((id) => get().applyLocalDeleteEdge(id));
+    // 노드 삭제 시 연결된 엣지가 이미 로컬 state.edges에서 지워졌는데, React Flow가 그
+    // 엣지에 대해 별도로 remove 변경을 또 보내는 경우가 있다 — 이미 없는 엣지면 서버(BE가
+    // 노드 소프트삭제 트랜잭션에서 이미 물리삭제함)에 또 삭제 요청을 보내지 않는다(404 방지).
+    removedIds.forEach((id) => {
+      if (get().edges.some((e) => e.id === id)) get().applyLocalDeleteEdge(id);
+    });
   },
 
   onConnect: (connection) => {
@@ -359,37 +362,34 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         trashedNodes: [...state.trashedNodes, target],
       };
     });
+    // BE가 소프트삭제 처리 후 알아서 다른 클라이언트에 node:delete를 브로드캐스트한다 —
+    // 여기서 또 emit하면 중복 브로드캐스트 + 서버가 이미 삭제된 노드를 다시 지우려다
+    // 404가 나는 레이스 컨디션이 생긴다(소켓 emit 제거).
     if (projectId) fireAndForget(deleteNodeApi(projectId, id));
-    activeCollab?.emitNode({ type: "delete", nodeId: id });
   },
 
   applyLocalRestoreNode: (id) => {
     const { projectId } = get();
-    let restored: CanvasNode | undefined;
     set((state) => {
       const target = state.trashedNodes.find((n) => n.id === id);
       if (!target) return state;
-      // 삭제 전 좌표로 되돌리지 않고, 그 사이 캔버스가 바뀌었을 수 있으니 항상 고정된
-      // 초기 위치(RESTORE_ORIGIN) 기준으로 현재 노드들과 안 겹치는 자리를 찾는다.
-      const node: CanvasNode = { ...target, position: findFreePosition(RESTORE_ORIGIN, state.nodes) };
-      restored = node;
+      // BE의 restore()는 위치를 안 건드리고 삭제 전 좌표 그대로 돌려준다 — FE도 새 위치를
+      // 계산하지 않고 그대로 복원해야 서버 진실값·다른 클라이언트와 위치가 어긋나지 않는다.
+      const node: CanvasNode = target;
       return {
         trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
         nodes: [...state.nodes, node],
       };
     });
+    // BE가 복원 처리 후 알아서 다른 클라이언트에 node:add를 브로드캐스트한다 — 중복 emit 제거.
     if (projectId) fireAndForget(restoreNodeApi(projectId, id));
-    if (restored) activeCollab?.emitNode({ type: "add", node: toNodeDTO(restored) });
   },
 
   applyLocalPermanentDeleteNode: (id) => {
     const { projectId } = get();
     set((state) => ({ trashedNodes: state.trashedNodes.filter((n) => n.id !== id) }));
+    // BE가 영구삭제 처리 후 알아서 다른 클라이언트에 브로드캐스트한다 — 중복 emit 제거.
     if (projectId) fireAndForget(purgeNodeApi(projectId, id));
-    // node:delete는 캔버스 소프트삭제에도 쓰이지만, 원격에서 이 id가 이미 nodes에 없으면
-    // (즉 이미 휴지통 항목이면) applyRemoteDeleteNode가 "영구삭제"로 해석해 정리한다 —
-    // 별도 소켓 이벤트 없이 휴지통 갯수/목록을 다른 탭에도 즉시 반영(§CV-16 실시간 동기화 공백 수정).
-    activeCollab?.emitNode({ type: "delete", nodeId: id });
   },
 
   applyLocalAddEdge: (source, target) => {
@@ -409,10 +409,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   applyRemoteAddNode: (node) => {
     // node:add는 신규 생성과 휴지통 복원(§CV-16) 둘 다에 쓰인다 — 복원이면 원격 탭의
     // trashedNodes에도 같은 id가 남아 있을 수 있으니 중복되지 않게 같이 제거한다.
-    set((state) => ({
-      nodes: [...state.nodes, node],
-      trashedNodes: state.trashedNodes.filter((n) => n.id !== node.id),
-    }));
+    set((state) => {
+      // 멱등성 가드 — 같은 node:add가 두 번 들어와도(과거 FE 중복 emit 잔재·네트워크 재시도 등)
+      // 캔버스에 같은 id 카드가 두 장 생기지 않게 한다.
+      if (state.nodes.some((n) => n.id === node.id)) return state;
+      return {
+        nodes: [...state.nodes, node],
+        trashedNodes: state.trashedNodes.filter((n) => n.id !== node.id),
+      };
+    });
   },
 
   applyRemoteUpdateNode: (id, patch, position) => {
