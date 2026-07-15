@@ -127,12 +127,8 @@ export class AuthService {
       throw AppException.conflict("이미 가입된 이메일입니다.");
     }
 
-    const existingOTP = await this.prisma.emailVerification.findFirst({
-      where: { email },
-    });
-    if (existingOTP && existingOTP.expiresAt > new Date()) {
-      throw AppException.conflict("이미 유효한 인증 코드가 발송되었습니다. 3분 뒤에 다시 시도해주세요.");
-    }
+    // 기존 인증 코드가 있더라도 삭제하고 새 코드로 덮어씌우도록 쿨타임 제한을 해제했습니다.
+    // (재전송 시 바로 새 코드가 발급됩니다)
 
     const code = randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
@@ -148,16 +144,21 @@ export class AuthService {
     }
 
     try {
-      await this.transporter.sendMail({
-        from: `"MarkFlow" <${env.SMTP_USER}>`,
-        to: email,
-        subject: "[MarkFlow] 이메일 인증 코드",
-        html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
-      });
+      // SMTP 발송을 비동기(백그라운드)로 처리하여 API 응답(클라이언트)이 지연되지 않도록 합니다.
+      this.transporter
+        .sendMail({
+          from: `"MarkFlow" <${env.SMTP_USER}>`,
+          to: email,
+          subject: "[MarkFlow] 이메일 인증 코드",
+          html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
+        })
+        .catch((err) => {
+          console.error("[Email Async Error]", err);
+        });
       return true;
     } catch (err) {
       console.error("[Email Error]", err);
-      throw AppException.internal("이메일 발송에 실패했습니다");
+      throw AppException.internal("이메일 발송 준비에 실패했습니다");
     }
   }
 
