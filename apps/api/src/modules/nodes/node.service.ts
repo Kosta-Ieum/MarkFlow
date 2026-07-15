@@ -182,6 +182,7 @@ export class NodeService {
 
     this.events.emit({
       projectId,
+      triggerUserId: userId,
       type: "NODE_DELETED",
       payload: { nodeId: node.id },
     });
@@ -222,6 +223,7 @@ export class NodeService {
 
     this.events.emit({
       projectId,
+      triggerUserId: userId,
       type: "NODE_RESTORED",
       payload: { node: toNodeDTO(node) },
     });
@@ -249,6 +251,7 @@ export class NodeService {
 
     this.events.emit({
       projectId,
+      triggerUserId: userId,
       type: "NODE_PURGED",
       payload: { nodeId },
     });
