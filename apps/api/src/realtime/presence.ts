@@ -125,4 +125,15 @@ export class PresenceService {
     if (!sockets) return [];
     return Array.from(sockets.values());
   }
+
+  listLocks(projectId: string): Record<string, string> {
+    const pLocks = this.locks.get(projectId);
+    const result: Record<string, string> = {};
+    if (!pLocks) return result;
+    
+    for (const [nodeId, info] of pLocks.entries()) {
+      result[nodeId] = info.userId;
+    }
+    return result;
+  }
 }
