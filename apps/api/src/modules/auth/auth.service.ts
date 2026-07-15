@@ -148,16 +148,21 @@ export class AuthService {
     }
 
     try {
-      await this.transporter.sendMail({
-        from: `"MarkFlow" <${env.SMTP_USER}>`,
-        to: email,
-        subject: "[MarkFlow] 이메일 인증 코드",
-        html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
-      });
+      // SMTP 발송을 비동기(백그라운드)로 처리하여 API 응답(클라이언트)이 지연되지 않도록 합니다.
+      this.transporter
+        .sendMail({
+          from: `"MarkFlow" <${env.SMTP_USER}>`,
+          to: email,
+          subject: "[MarkFlow] 이메일 인증 코드",
+          html: `<p>안녕하세요!</p><p>MarkFlow 가입 인증 코드는 <strong>${code}</strong> 입니다.</p><p>3분 이내에 입력해주세요.</p>`,
+        })
+        .catch((err) => {
+          console.error("[Email Async Error]", err);
+        });
       return true;
     } catch (err) {
       console.error("[Email Error]", err);
-      throw AppException.internal("이메일 발송에 실패했습니다");
+      throw AppException.internal("이메일 발송 준비에 실패했습니다");
     }
   }
 
