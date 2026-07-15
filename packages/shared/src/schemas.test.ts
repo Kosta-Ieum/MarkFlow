@@ -96,6 +96,13 @@ describe("Auth 포맷 제약", () => {
     if (parsed.success) expect(parsed.data.nickname).toBe("닉네임");
   });
 
+  it("NicknameSchema는 내부 공백을 거부한다 (가입·프로필 공용)", () => {
+    const ok = { name: "A", email: "a@b.com", password: "12345678" };
+    expect(SignupRequestSchema.safeParse({ ...ok, nickname: "홍 길동" }).success).toBe(false);
+    expect(UpdateProfileRequestSchema.safeParse({ nickname: "새 닉" }).success).toBe(false);
+    expect(UpdateProfileRequestSchema.safeParse({ nickname: "새닉네임" }).success).toBe(true);
+  });
+
   it("UpdateProfileRequestSchema는 nickname 2~20자·trim을 검증한다", () => {
     expect(UpdateProfileRequestSchema.safeParse({ nickname: "ab" }).success).toBe(true);
     expect(UpdateProfileRequestSchema.safeParse({ nickname: "a" }).success).toBe(false);

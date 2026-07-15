@@ -74,9 +74,12 @@ export function ProfilePage() {
             id="profile-nickname"
             type="text"
             autoComplete="nickname"
-            placeholder="협업 화면에 표시될 이름 (2~20자)"
+            placeholder="협업 화면에 표시될 이름 (2~20자, 공백 없이)"
             className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             {...register("nickname")}
+            onKeyDown={(e) => {
+              if (e.key === " ") e.preventDefault();
+            }}
           />
           {errors.nickname && <p className="mt-1 text-xs text-error">{errors.nickname.message}</p>}
           {saved && !isDirty && <p className="mt-1 text-xs text-brand">저장했어요.</p>}

@@ -17,6 +17,15 @@ import {
   type TrashNode,
 } from "../lib/canvasApi";
 import type { CollabAPI } from "../collab/CollabAPI";
+import { useAuthStore } from "./authStore";
+import { usePresenceStore } from "./presenceStore";
+
+/** 소프트 락: 다른 사용자가 md 편집 중인 노드인지 — 이동·삭제 차단에 공용으로 쓴다. */
+function isLockedByOther(nodeId: string): boolean {
+  const lockedBy = usePresenceStore.getState().locks[nodeId];
+  const myId = useAuthStore.getState().user?.id;
+  return !!lockedBy && lockedBy !== myId;
+}
 
 // BE 노드 REST(IEUM-24)가 아직 스텁이라 호출이 실패할 수 있다 — 화면은 항상 로컬
 // 낙관적 업데이트를 먼저 반영하고, REST는 "되면 되는" fire-and-forget으로 보낸다.
@@ -59,6 +68,41 @@ export function emitNodeUpdate(node: Partial<NodeDTO> & { id: string }): void {
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 2000; // .claude/rules/frontend.md: 저장 debounce ≈2s
+
+// 신규/복원 노드 배치 — 카드 실제 크기(MarkdownNodeCard: w-[186px], 접힘 상태 높이 ≈88px)를
+// 기준으로 그리드 슬롯을 순서대로 훑어, 현재 캔버스에 있는 노드들과 실제로 안 겹치는 자리를
+// 찾는다(단순 순번 증가가 아니라 매번 현재 nodes 배열을 검사 — 사용자가 노드를 옮겨서
+// 그리드 슬롯 자리를 차지하고 있어도 정확히 피해간다).
+const NODE_WIDTH = 186;
+const NODE_HEIGHT_APPROX = 88;
+const GRID_GAP = 24;
+const GRID_STEP_X = NODE_WIDTH + GRID_GAP;
+const GRID_STEP_Y = NODE_HEIGHT_APPROX + GRID_GAP;
+const GRID_COLS = 4;
+const MAX_GRID_SLOTS = 500; // 사실상 도달 안 하는 안전장치
+// 휴지통 복구 노드의 고정 초기 위치 — 삭제 전 좌표가 아니라 항상 이 지점 기준으로 배치한다.
+const RESTORE_ORIGIN: XYPosition = { x: 120, y: 120 };
+// 노드 드래그 허용 범위(flow 좌표계) — 캔버스 바깥으로 완전히 나가 못 찾게 되는 것 방지.
+export const CANVAS_NODE_EXTENT: [[number, number], [number, number]] = [
+  [-1000, -1000],
+  [6000, 6000],
+];
+
+function overlapsCard(a: XYPosition, b: XYPosition): boolean {
+  return Math.abs(a.x - b.x) < GRID_STEP_X && Math.abs(a.y - b.y) < GRID_STEP_Y;
+}
+
+/** origin에서 시작해 그리드를 훑으며 existing과 실제로 안 겹치는 첫 자리를 반환한다. */
+function findFreePosition(origin: XYPosition, existing: { position: XYPosition }[]): XYPosition {
+  for (let seq = 0; seq < MAX_GRID_SLOTS; seq++) {
+    const candidate = {
+      x: origin.x + (seq % GRID_COLS) * GRID_STEP_X,
+      y: origin.y + Math.floor(seq / GRID_COLS) * GRID_STEP_Y,
+    };
+    if (!existing.some((n) => overlapsCard(candidate, n.position))) return candidate;
+  }
+  return origin;
+}
 
 export interface MarkdownNodeData extends Record<string, unknown> {
   title: string;
@@ -215,13 +259,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   onNodesChange: (changes) => {
-    const nonRemove = changes.filter((c) => c.type !== "remove");
+    // 소프트 락: 다른 사용자가 md 편집 중인 노드는 이동도 막는다 — 멀티선택으로 함께 끌려온
+    // 경우(React Flow가 선택된 노드를 draggable 여부와 무관하게 같이 옮기는 케이스)까지
+    // 막으려면 position 변경 자체를 여기서 걸러야 한다(개별 노드 draggable=false만으론 부족).
+    const nonRemove = changes.filter(
+      (c) => c.type !== "remove" && !(c.type === "position" && isLockedByOther(c.id)),
+    );
     set((state) => ({ nodes: applyNodeChanges(nonRemove, state.nodes) as CanvasNode[] }));
     get().scheduleSave();
 
     // 드래그 완료(커밋) 시점의 최종 위치만 실시간 전파 — 매 프레임 emit하면
     // 네트워크가 막히고 드롭 후 잔상이 생긴다(과거 프로토타입에서 겪은 문제).
-    const committed = changes.filter(
+    const committed = nonRemove.filter(
       (c): c is FlowNodeChange & { type: "position"; id: string; dragging: false } =>
         c.type === "position" && c.dragging === false,
     );
@@ -234,8 +283,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   onEdgesChange: (changes) => {
-    set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
+    // remove는 React Flow 기본 처리(Backspace 등)로 흘려보내지 않고 applyLocalDeleteEdge를
+    // 거치게 한다 — 안 그러면 emit이 빠져 삭제가 남의 화면에 실시간 반영되지 않는다.
+    const removedIds = changes.filter((c) => c.type === "remove").map((c) => c.id);
+    const nonRemove = changes.filter((c) => c.type !== "remove");
+    set((state) => ({ edges: applyEdgeChanges(nonRemove, state.edges) }));
     get().scheduleSave();
+    removedIds.forEach((id) => get().applyLocalDeleteEdge(id));
   },
 
   onConnect: (connection) => {
@@ -251,20 +305,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   applyLocalAddNode: (position, type = "idea") => {
     const id = newId();
-    const count = get().nodes.length;
-    // 매번 같은 좌표·이름으로 생성하면 연속 추가 시 노드가 그대로 겹친다 —
-    // 추가 순서에 따라 카드 한 칸씩 계단식으로 띄우고, 이름에 순번을 붙여 구분한다.
-    const STEP = 32;
-    const COLS = 6;
-    const cascadedPosition = {
-      x: position.x + (count % COLS) * STEP,
-      y: position.y + (count % COLS) * STEP,
-    };
+    const { nodes } = get();
+    // 매번 같은 좌표·이름으로 생성하면 연속 추가 시 노드가 그대로 겹친다 — 현재 캔버스에 있는
+    // 노드들과 실제로 안 겹치는 자리를 찾아 배치한다(findFreePosition).
     const node: CanvasNode = {
       id,
       type: "markdown",
-      position: cascadedPosition,
-      data: { title: `새 노드 ${count + 1}`, markdown: "", type, collapsed: true },
+      position: findFreePosition(position, nodes),
+      data: { title: `새 노드 ${nodes.length + 1}`, markdown: "", type, collapsed: true },
     };
     set((state) => ({ nodes: [...state.nodes, node] }));
     get().scheduleSave();
@@ -298,6 +346,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // 소프트 삭제 + 연결된 엣지 물리 삭제 (§CV-08 — 복구 시 엣지는 미복원 §CV-16)
   // DELETE /nodes/:id가 서버에서 엣지 정리까지 같이 하므로 bulk 저장(scheduleSave)은 안 탄다.
   applyLocalDeleteNode: (id) => {
+    // 소프트 락: 다른 사용자가 md 편집 중인 노드는 삭제 차단 — 휴지통 드래그·멀티선택 등
+    // 호출 경로가 늘어나도 여기 한 곳만 지키면 전부 막힌다(UX 가드, 최종 방어는 서버).
+    if (isLockedByOther(id)) return;
     const { projectId } = get();
     set((state) => {
       const target = state.nodes.find((n) => n.id === id);
@@ -318,10 +369,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => {
       const target = state.trashedNodes.find((n) => n.id === id);
       if (!target) return state;
-      restored = target;
+      // 삭제 전 좌표로 되돌리지 않고, 그 사이 캔버스가 바뀌었을 수 있으니 항상 고정된
+      // 초기 위치(RESTORE_ORIGIN) 기준으로 현재 노드들과 안 겹치는 자리를 찾는다.
+      const node: CanvasNode = { ...target, position: findFreePosition(RESTORE_ORIGIN, state.nodes) };
+      restored = node;
       return {
         trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
-        nodes: [...state.nodes, target],
+        nodes: [...state.nodes, node],
       };
     });
     if (projectId) fireAndForget(restoreNodeApi(projectId, id));
