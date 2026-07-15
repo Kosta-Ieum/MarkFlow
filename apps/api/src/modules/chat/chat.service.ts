@@ -10,6 +10,7 @@ interface ChatMessageRow {
   user: {
     id: string;
     name: string;
+    nickname: string | null;
   };
 }
 
@@ -21,6 +22,7 @@ function toChatMessageDTO(row: ChatMessageRow): ChatMessageDTO {
     user: {
       id: row.user.id,
       name: row.user.name,
+      nickname: row.user.nickname,
     },
   };
 }
