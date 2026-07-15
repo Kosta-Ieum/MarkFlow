@@ -54,8 +54,8 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const user = await this.prisma.user.create({
-      data: { email: dto.email, name: dto.name, passwordHash },
-      select: { id: true, email: true, name: true },
+      data: { email: dto.email, name: dto.name, passwordHash, nickname: dto.nickname },
+      select: { id: true, email: true, name: true, nickname: true },
     });
 
     const tokenPair = await this.issueTokenPair(user.id, user.email);
@@ -65,7 +65,7 @@ export class AuthService {
   async login(dto: LoginRequest): Promise<{ response: AuthResponse; tokenPair: TokenPair }> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      select: { id: true, email: true, name: true, passwordHash: true },
+      select: { id: true, email: true, name: true, nickname: true, passwordHash: true },
     });
     if (!user) throw AppException.invalidCredentials();
 
@@ -115,7 +115,7 @@ export class AuthService {
   async me(userId: string): Promise<User> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, nickname: true },
     });
     if (!user) throw AppException.notFound("사용자를 찾을 수 없습니다");
     return user;
