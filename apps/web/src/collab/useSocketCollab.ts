@@ -4,7 +4,7 @@
 import { useEffect, useRef } from "react";
 import type { Socket } from "socket.io-client";
 import { SOCKET_EVENTS } from "@markflow/shared";
-import type { CanvasSnapshot, ChatMessageDTO, EdgeDTO, NodeDTO, XY } from "@markflow/shared";
+import type { CanvasSnapshot, ChatMessageDTO, EdgeDTO, NodeDTO, UserRef, XY } from "@markflow/shared";
 
 import { createSocket } from "../lib/socket";
 import { useAuthStore } from "../store/authStore";
@@ -16,10 +16,11 @@ import type { CollabAPI } from "./CollabAPI";
 const WS_URL = (import.meta.env.VITE_WS_URL as string | undefined) ?? "http://localhost:4000";
 const CURSOR_THROTTLE_MS = 50; // .claude/rules/frontend.md: 커서 throttle ≈50ms
 
-// presence:update · lock:update는 packages/shared/src/socket.ts에 payload schema가 아직
-// 없다(계약 공백 — BE가 SocketPayloadSchemas에 채우면 이 타입은 import로 교체).
+// presence:update payload는 shared 계약(socket.ts)의 UserRefSchema(id/name/nickname?) 배열.
+// nickname은 커서·접속자 표기에 쓰인다(표시는 nickname ?? name). lock:update는 아직 shared에
+// payload schema가 없어 로컬 정의를 유지한다(BE가 채우면 import로 교체).
 interface PresenceUpdatePayload {
-  users: { id: string; name: string }[];
+  users: UserRef[];
 }
 interface LockUpdatePayload {
   nodeId: string;

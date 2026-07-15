@@ -21,7 +21,8 @@ export function createMockSocket() {
   const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const channel = new BroadcastChannel(CHANNEL_NAME);
   const handlers = new Map<string, Set<Handler>>();
-  const roster = new Map<string, string>(); // userId -> name (다른 탭들, 나 자신은 제외)
+  // userId -> 표시명(다른 탭들, 나 자신은 제외). nickname은 접속자/커서 표기(nickname ?? name)용.
+  const roster = new Map<string, { name: string; nickname?: string | null }>();
   let projectId: string | null = null;
 
   const me = () => useAuthStore.getState().user;
@@ -40,8 +41,8 @@ export function createMockSocket() {
 
   const rosterAsList = () => {
     const self = me();
-    const list = [...roster.entries()].map(([id, name]) => ({ id, name }));
-    if (self) list.unshift({ id: self.id, name: self.name });
+    const list = [...roster.entries()].map(([id, u]) => ({ id, name: u.name, nickname: u.nickname }));
+    if (self) list.unshift({ id: self.id, name: self.name, nickname: self.nickname });
     return list;
   };
 
@@ -54,9 +55,9 @@ export function createMockSocket() {
     if (msg.event === "__presence_request__" || msg.event === "__presence_announce__") {
       if (msg.payload.projectId !== projectId) return;
       if (msg.event === "__presence_request__") {
-        send("__presence_announce__", { projectId, userId: me()?.id, name: me()?.name });
+        send("__presence_announce__", { projectId, userId: me()?.id, name: me()?.name, nickname: me()?.nickname });
       }
-      if (msg.payload.userId) roster.set(msg.payload.userId, msg.payload.name);
+      if (msg.payload.userId) roster.set(msg.payload.userId, { name: msg.payload.name, nickname: msg.payload.nickname });
       broadcastPresence();
       return;
     }
