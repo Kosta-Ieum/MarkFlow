@@ -114,15 +114,29 @@ export class NodeService {
       });
 
       if (dto.markdown !== undefined) {
-        await tx.activityLog.create({
-          data: {
+        // 1분 이내에 동일 유저가 동일 노드를 수정한 기록이 있다면 생략 (디바운싱)
+        const recentLog = await tx.activityLog.findFirst({
+          where: {
             projectId,
             userId,
             targetType: "NODE",
             targetId: nodeId,
             action: "UPDATE",
+            createdAt: { gte: new Date(Date.now() - 60000) },
           },
         });
+
+        if (!recentLog) {
+          await tx.activityLog.create({
+            data: {
+              projectId,
+              userId,
+              targetType: "NODE",
+              targetId: nodeId,
+              action: "UPDATE",
+            },
+          });
+        }
       }
 
       return updated;
