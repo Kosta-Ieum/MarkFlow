@@ -23,17 +23,14 @@ export class RefreshTokenStore {
     });
   }
 
-  /** 옛 토큰 무효화 + 새 토큰 저장 (트랜잭션) */
-  async rotate(
-    oldToken: string,
-    userId: string,
-    newToken: string,
-    expiresAt: Date,
-  ): Promise<string> {
-    const [_, record] = await this.prisma.$transaction([
-      this.prisma.refreshToken.deleteMany({ where: { token: oldToken } }),
-      this.prisma.refreshToken.create({ data: { userId, token: newToken, expiresAt } }),
-    ]);
+  /** 기존 토큰 유지 + 만료 기한만 연장 (로테이션 미사용/Race Condition 방지) */
+  async extend(token: string, expiresAt: Date): Promise<string> {
+    const records = await this.prisma.refreshToken.findMany({ where: { token } });
+    if (records.length === 0) throw new Error("Token not found");
+    const record = await this.prisma.refreshToken.update({
+      where: { id: records[0].id },
+      data: { expiresAt },
+    });
     return record.id;
   }
 
