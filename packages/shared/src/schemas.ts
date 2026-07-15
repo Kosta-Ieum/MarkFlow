@@ -111,12 +111,19 @@ export const UserSchema = z.object({
   nickname: z.string().nullable().optional(),
 });
 
+// 공개 표시명 규칙 — 2~20자, 앞뒤 공백 trim, 내부 공백 불가. 가입·프로필 변경 공용.
+export const NicknameSchema = z
+  .string()
+  .trim()
+  .min(2, "닉네임은 2자 이상이어야 합니다")
+  .max(20, "닉네임은 20자 이하여야 합니다")
+  .regex(/^\S+$/, "닉네임에 공백은 쓸 수 없습니다");
+
 export const SignupRequestSchema = z.object({
   name: z.string(),
   email: z.string().email(),
   password: z.string().min(8),
-  // 회원가입 시 필수 입력 — 공개 표시명(2~20자, 앞뒤 공백 trim).
-  nickname: z.string().trim().min(2).max(20),
+  nickname: NicknameSchema, // 회원가입 시 필수 입력 — 공개 표시명
 });
 
 export const LoginRequestSchema = z.object({
@@ -135,7 +142,7 @@ export const RefreshResponseSchema = z.object({
 
 // --- Profile (PATCH /users/me — 표시명 변경) ---
 export const UpdateProfileRequestSchema = z.object({
-  nickname: z.string().trim().min(2).max(20),
+  nickname: NicknameSchema,
 });
 
 // --- Email OTP (회원가입 이메일 인증 / openapi: SendCode/VerifyEmail Request·Response) ---
