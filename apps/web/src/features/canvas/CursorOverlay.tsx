@@ -12,7 +12,10 @@ export function CursorOverlay() {
   const myId = useAuthStore((s) => s.user?.id);
   const { flowToScreenPosition } = useReactFlow();
 
-  const nameOf = (userId: string) => onlineUsers.find((u) => u.id === userId)?.name ?? "참여자";
+  const nameOf = (userId: string) => {
+    const u = onlineUsers.find((u) => u.id === userId);
+    return u?.nickname ?? u?.name ?? "참여자";
+  };
 
   // flowToScreenPosition은 뷰포트(페이지) 기준 절대좌표를 반환한다(클릭 이벤트의
   // clientX/Y와 같은 좌표계) — 부모(캔버스 div)는 사이드바만큼 페이지 원점에서

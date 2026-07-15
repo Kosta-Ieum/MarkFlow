@@ -152,7 +152,7 @@ function ActivityItem({ activity, isLast }: ActivityItemProps) {
         }`}
       >
         <p className="text-sm leading-snug text-ink">
-          <span className="font-medium">{activity.user.name}</span>
+          <span className="font-medium">{activity.user.nickname ?? activity.user.name}</span>
           {"님이 "}
           {activity.targetLabel !== "(삭제된 항목)" ? (
             <span className="font-medium">'{targetLabel}'</span>
