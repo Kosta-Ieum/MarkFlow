@@ -149,11 +149,16 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
     await socket.join(roomOf(projectId));
     socket.emit(SOCKET_EVENTS.syncInit, snapshot);
 
-    const name = (socket.data.email as string | undefined) ?? userId;
-    this.presenceService.add(projectId, socket.id, { id: userId, name });
+    const name = (socket.data.name as string | undefined) ?? (socket.data.email as string | undefined) ?? userId;
+    const nickname = socket.data.nickname as string | null | undefined;
+    
+    this.presenceService.add(projectId, socket.id, { id: userId, name, nickname });
     this.server
       .to(roomOf(projectId))
       .emit(SOCKET_EVENTS.presenceUpdate, { users: this.presenceService.list(projectId) });
+
+    const locks = this.presenceService.listLocks(projectId);
+    socket.emit(SOCKET_EVENTS.lockUpdate, { projectId, locks });
 
     return { ok: true, data: snapshot };
   }
