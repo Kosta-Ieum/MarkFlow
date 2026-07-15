@@ -44,6 +44,7 @@ import {
   updateOwnProfile,
   hasMockSession,
   clearMockSession,
+  isRegisteredEmail,
   issueToken,
   generateCode,
   verifyCode,
@@ -153,6 +154,13 @@ export const handlers = [
     await delay(LATENCY_MS);
     const body = (await request.json().catch(() => ({}))) as Partial<{ email: string }>;
     if (!body.email) return badRequest("email이 필요합니다.");
+    // 실서버처럼 이미 가입된 이메일이면 여기서 막는다 — 가입 폼이 OTP 단계 전에 잡도록.
+    if (isRegisteredEmail(body.email)) {
+      const errBody: ErrorResponse = {
+        error: { code: "CONFLICT", message: "이미 가입된 이메일입니다.", details: null },
+      };
+      return HttpResponse.json(errBody, { status: 409 });
+    }
     const code = generateCode(body.email);
     // 실제 메일 전송이 없으므로 콘솔에 노출(개발 편의). UI는 SendCodeResponse 계약만 보고
     // devCode 필드는 안 쓴다 — F2 화면 로직 변경 없이 콘솔로만 확인 가능하게 함.

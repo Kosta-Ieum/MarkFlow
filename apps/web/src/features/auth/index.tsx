@@ -124,6 +124,7 @@ interface SignupFormProps {
 }
 
 function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
+  const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -133,15 +134,36 @@ function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
     defaultValues,
   });
 
-  // 가입은 여기서 하지 않는다 — 이메일 인증 단계(VerifyStep)로 전환만.
-  const handleSignup = handleSubmit((data) => {
-    onVerifyNeeded(data.name, data.email, data.password, data.nickname);
+  // 인증 코드 발송이 성공해야 OTP 단계로 넘어간다 — 이메일 중복(409) 등은
+  // 여기(가입 폼)에서 잡아 보여준다(OTP 화면으로 넘어간 뒤 뜨지 않게).
+  const handleSignup = handleSubmit(async (data) => {
+    setServerError(null);
+    try {
+      await api<SendCodeResponse>("/auth/email/send-code", {
+        method: "POST",
+        body: JSON.stringify({ email: data.email }),
+      });
+      onVerifyNeeded(data.name, data.email, data.password, data.nickname);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "인증 코드 전송 중 오류가 발생했습니다.";
+      setServerError(message);
+    }
   });
 
   const busy = isSubmitting;
 
   return (
     <form onSubmit={handleSignup} noValidate>
+      {serverError && (
+        <div
+          role="alert"
+          className="mb-6 rounded-lg border border-error-border bg-error-bg px-4 py-3 text-sm text-error"
+        >
+          {serverError}
+        </div>
+      )}
+
       <div className="flex flex-col gap-4">
         {/* 이름 */}
         <div>
@@ -170,9 +192,12 @@ function SignupForm({ defaultValues, onVerifyNeeded }: SignupFormProps) {
             id="signup-nickname"
             type="text"
             autoComplete="nickname"
-            placeholder="협업 화면에 표시될 이름 (2~20자)"
+            placeholder="협업 화면에 표시될 이름 (2~20자, 공백 없이)"
             className="w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             {...register("nickname")}
+            onKeyDown={(e) => {
+              if (e.key === " ") e.preventDefault();
+            }}
           />
           {errors.nickname && (
             <p className="mt-1 text-xs text-error">{errors.nickname.message}</p>
@@ -249,7 +274,6 @@ type VerifyCodeForm = Pick<VerifyEmailRequest, "code">;
 function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: VerifyStepProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const sentRef = useRef(false);
 
   const {
     register,
@@ -259,6 +283,7 @@ function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: Veri
     resolver: zodResolver(VerifyEmailRequestSchema.pick({ code: true })),
   });
 
+  // 인증 코드는 가입 폼 제출 시 이미 발송됨(중복 이메일이면 거기서 걸러짐). 여기선 재전송만 담당.
   const sendCode = async () => {
     setServerError(null);
     try {
@@ -272,14 +297,6 @@ function VerifyStep({ name, email, password, nickname, onBack, onSuccess }: Veri
       setServerError(message);
     }
   };
-
-  // mount 시 1회 자동 발송 — StrictMode 이중 호출은 ref 가드로 차단.
-  useEffect(() => {
-    if (sentRef.current) return;
-    sentRef.current = true;
-    void sendCode();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleResend = async () => {
     setNotice(null);
