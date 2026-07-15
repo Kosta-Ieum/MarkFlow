@@ -3,6 +3,8 @@ import type { AuthResponse, User } from "@markflow/shared";
 import { create } from "zustand";
 
 import { api, refreshAccessToken } from "../lib/api";
+import { useChatStore } from "./chatStore";
+import { usePresenceStore } from "./presenceStore";
 
 // 부팅 refresh는 페이지 로드당 1회만 — StrictMode 이중 이펙트·리마운트에도 refresh 회전 중복 방지.
 let bootstrapStarted = false;
@@ -35,7 +37,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   setAuth: (token, user) => set({ token, user, isAuthenticated: true }),
   setAccessToken: (token) => set({ token, isAuthenticated: true }),
-  clearAuth: () => set({ token: null, user: null, isAuthenticated: false }),
+  clearAuth: () => {
+    set({ token: null, user: null, isAuthenticated: false });
+    // 세션 종료 시 협업 스토어도 비운다 — 예전엔 하드 리로드가 flush하던 역할을,
+    // 리로드 제거(반응형 라우팅 전환) 후엔 여기서 명시적으로 정리한다(다음 로그인 잔상 방지).
+    usePresenceStore.getState().clear();
+    useChatStore.getState().clear();
+  },
 
   // 앱 부팅 시 1회 — refresh 쿠키로 세션 복원(R1.4). access는 메모리라 새로고침마다 필요.
   bootstrap: async () => {

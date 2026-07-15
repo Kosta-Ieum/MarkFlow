@@ -16,7 +16,7 @@ export class ApiError extends Error {
 }
 
 // 서버가 세션을 강제 종료(다른 기기 로그인 등)했을 때, 로그인 화면에 사유를 전달하기 위한 저장소.
-// 전체 네비게이션(window.location)으로 React 상태가 날아가므로 sessionStorage로 넘긴다.
+// api 계층(비컴포넌트)은 사유를 React 상태로 넘길 수 없으므로 sessionStorage로 전달한다.
 const SESSION_NOTICE_KEY = "markflow-session-notice";
 
 function stashSessionNotice(message: string): void {
@@ -38,11 +38,9 @@ export function takeSessionNotice(): string | null {
   }
 }
 
-function redirectToLogin(): void {
-  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-    window.location.href = "/login";
-  }
-}
+// 세션 종료 시 리다이렉트는 하드 리로드(window.location) 대신 clearAuth로 처리한다 —
+// clearAuth가 isAuthenticated=false로 만들면 ProtectedRoute가 클라이언트 라우팅으로 /login 전환.
+// (하드 리로드는 재부팅 → bootstrap이 죽은 쿠키로 refresh 재시도 → 409 → 로그인↔로딩 깜빡임을 유발했다.)
 
 // 서버가 세션을 강제 종료한 응답인지 판별 — 전용 코드(DUPLICATE_LOGIN) 또는 과도기의 409+메시지.
 // BE가 현재 "다른 기기 로그인"에 generic CONFLICT 코드를 써서, 전용 코드 도입 전까지 메시지로 보강한다.
@@ -134,9 +132,9 @@ async function request<T>(
         return request<T>(path, init, false);
       }
     }
-    // refresh 불가/실패 → 세션 종료 후 로그인으로(R1.3). (DUPLICATE_LOGIN 사유는 rawRefresh가 저장)
+    // refresh 불가/실패 → 세션 종료(R1.3). clearAuth → ProtectedRoute가 반응형으로 /login 전환.
+    // (DUPLICATE_LOGIN 사유는 rawRefresh가 이미 sessionStorage에 저장)
     useAuthStore.getState().clearAuth();
-    redirectToLogin();
     throw new ApiError(401, "UNAUTHORIZED", "인증이 만료되었습니다. 다시 로그인해 주세요.");
   }
 
@@ -156,8 +154,7 @@ async function request<T>(
     // 다른 기기 로그인 등으로 서버가 세션을 강제 종료한 경우 로그아웃 — 전용 코드 또는 409+메시지로 감지.
     if (isSessionEnded(res.status, err)) {
       if (err?.message) stashSessionNotice(err.message);
-      useAuthStore.getState().clearAuth();
-      redirectToLogin();
+      useAuthStore.getState().clearAuth(); // ProtectedRoute가 반응형으로 /login 전환(하드 리로드 없음)
     }
 
     throw new ApiError(
