@@ -102,11 +102,10 @@ export class AuthService {
     if (!user) throw AppException.unauthorized("사용자를 찾을 수 없습니다");
 
     const expiresAt = this.calcRefreshExpiry();
-    const newRefreshToken = this.genRefreshToken();
-    const sessionId = await this.refreshStore.rotate(oldRefreshToken, user.id, newRefreshToken, expiresAt);
+    const sessionId = await this.refreshStore.extend(oldRefreshToken, expiresAt);
 
     const accessToken = this.signAccess({ id: user.id, email: user.email }, sessionId);
-    const tokenPair: TokenPair = { accessToken, refreshToken: newRefreshToken, refreshExpiresAt: expiresAt };
+    const tokenPair: TokenPair = { accessToken, refreshToken: oldRefreshToken, refreshExpiresAt: expiresAt };
     return { response: { accessToken }, tokenPair };
   }
 
