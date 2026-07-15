@@ -2,7 +2,7 @@
 // + IEUM-23 [F1-1.3] Zustand 캔버스 스토어 + IEUM-27 [F1-2.1] 캔버스↔DB 연동·자동저장
 // + IEUM-28 [F1-2.2] 휴지통 드래그드롭 + IEUM-34 [F1-3.1] 실시간 소켓 연결
 // + IEUM-35 [F1-3.2] 멀티커서·소프트 락 UI.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Background,
@@ -16,8 +16,11 @@ import type { Node as FlowNode, OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { canEdit } from "../../lib/permissions";
-import { emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
+import { CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
+import { useAuthStore } from "../../store/authStore";
+import { usePresenceStore } from "../../store/presenceStore";
 import { CursorOverlay } from "./CursorOverlay";
+import { DeletableEdge } from "./DeletableEdge";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
 import { MarkdownNodeCard } from "./MarkdownNodeCard";
@@ -27,6 +30,7 @@ import { TrashPanel } from "./TrashPanel";
 import { ZoomControls } from "./ZoomControls";
 
 const nodeTypes = { markdown: MarkdownNodeCard };
+const edgeTypes = { default: DeletableEdge };
 
 const defaultEdgeOptions = {
   style: { stroke: "#B9B4A7", strokeWidth: 2, strokeDasharray: "6 6" },
@@ -38,11 +42,9 @@ function isPointInRect(x: number, y: number, rect: DOMRect): boolean {
 }
 
 function CanvasSurface({
-  leftSidebarExpanded,
   rightPanelExpanded,
   rightPanelOffset,
 }: {
-  leftSidebarExpanded: boolean;
   rightPanelExpanded: boolean;
   rightPanelOffset: number;
 }) {
@@ -59,6 +61,20 @@ function CanvasSurface({
   // (프론트 비활성화는 UX 가드일 뿐, 최종 방어는 서버 — .claude/rules/frontend.md)
   const readOnly = role !== null && !canEdit(role);
   const { screenToFlowPosition } = useReactFlow();
+
+  // 소프트 락: 다른 사용자가 md 편집 중인 노드는 드래그 자체를 시작 못 하게 막는다
+  // (§CV realtime — 삭제는 canvasStore.applyLocalDeleteNode가 한 곳에서 막음).
+  const locks = usePresenceStore((s) => s.locks);
+  const myId = useAuthStore((s) => s.user?.id);
+  const renderNodes = useMemo(
+    () =>
+      nodes.map((n) => {
+        const lockedBy = locks[n.id];
+        const lockedByOther = !!lockedBy && lockedBy !== myId;
+        return lockedByOther ? { ...n, draggable: false } : n;
+      }),
+    [nodes, locks, myId],
+  );
 
   const trashRef = useRef<HTMLDivElement>(null);
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
@@ -82,7 +98,11 @@ function CanvasSurface({
     const rect = trashRef.current?.getBoundingClientRect();
     const point = getPointerPosition(event);
     if (rect && point && isPointInRect(point.x, point.y, rect)) {
-      applyLocalDeleteNode(node.id);
+      // 멀티선택 중 여러 노드를 함께 드래그했을 때도 전부 휴지통행 — React Flow는
+      // 드래그를 주도한 노드 하나만 콜백 인자로 넘겨주므로, 선택 목록에서 직접 찾는다.
+      const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
+      const targetIds = selectedIds.length > 1 && selectedIds.includes(node.id) ? selectedIds : [node.id];
+      targetIds.forEach((id) => applyLocalDeleteNode(id));
     }
     setIsDragOverTrash(false);
   };
@@ -115,7 +135,7 @@ function CanvasSurface({
         {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
       </div>
       <ReactFlow
-        nodes={nodes}
+        nodes={renderNodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -123,6 +143,8 @@ function CanvasSurface({
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        nodeExtent={CANVAS_NODE_EXTENT}
         defaultEdgeOptions={defaultEdgeOptions}
         defaultViewport={DEFAULT_VIEWPORT}
         minZoom={MIN_ZOOM}
@@ -135,10 +157,17 @@ function CanvasSurface({
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#D9D5C9" />
-        <MiniMap pannable zoomable className="!bg-surface !border !border-line" />
+        {/* ZoomControls(bottom-6, 우측 하단 필)와 같은 모서리에 기본 배치돼 서로 겹치던 문제 —
+            미니맵을 그만큼 위로 띄워 자리를 분리한다. */}
+        <MiniMap
+          pannable
+          zoomable
+          className="!bg-surface !border !border-line"
+          style={{ marginBottom: 56 }}
+        />
       </ReactFlow>
       <CursorOverlay />
-      <TrashPanel ref={trashRef} leftSidebarExpanded={leftSidebarExpanded} isDragOver={isDragOverTrash} />
+      <TrashPanel ref={trashRef} isDragOver={isDragOverTrash} />
       <ZoomControls offsetRight={rightPanelExpanded ? rightPanelOffset : 0} />
     </div>
   );
@@ -184,11 +213,7 @@ export function CanvasPage() {
           nodeCount={nodes.length}
           nodes={nodes.map((n) => ({ id: n.id, title: n.data.title }))}
         />
-        <CanvasSurface
-          leftSidebarExpanded={leftExpanded}
-          rightPanelExpanded={rightExpanded}
-          rightPanelOffset={RIGHT_PANEL_EXPANDED_WIDTH}
-        />
+        <CanvasSurface rightPanelExpanded={rightExpanded} rightPanelOffset={RIGHT_PANEL_EXPANDED_WIDTH} />
         {/* VIEWER는 소켓이 필요 없다 — 채팅/히스토리도 실시간 계약 위에 있으므로 아예 숨긴다(회색 비활성이 아니라 미노출). */}
         {role !== "VIEWER" && (
           <RightPanel
