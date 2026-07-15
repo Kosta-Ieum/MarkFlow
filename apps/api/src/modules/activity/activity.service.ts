@@ -91,7 +91,7 @@ export class ActivityService {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, nickname: true } } },
     });
 
     const hasMore = rows.length > limit;

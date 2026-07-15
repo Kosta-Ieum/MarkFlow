@@ -48,7 +48,7 @@ export class ChatService {
       },
       include: {
         user: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, nickname: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -95,7 +95,7 @@ export class ChatService {
       },
       include: {
         user: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, nickname: true },
         },
       },
     });

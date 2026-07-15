@@ -19,7 +19,7 @@ export class MemberService {
     const members = await this.prisma.projectMember.findMany({
       where: { projectId },
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, nickname: true } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -29,6 +29,7 @@ export class MemberService {
       name: m.user.name,
       email: m.user.email,
       role: m.role,
+      nickname: m.user.nickname,
     }));
   }
 
