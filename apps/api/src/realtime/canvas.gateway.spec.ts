@@ -190,4 +190,21 @@ describe("CanvasGateway (BE-3.1 sync:join/sync:init/presence)", () => {
     const presenceUpdate = await presenceUpdatePromise;
     expect(presenceUpdate.users).toHaveLength(2);
   });
+
+  it("잘못된 페이로드(Zod 스키마 불일치) 전송 시 ack가 VALIDATION_ERROR를 반환한다", async () => {
+    const token = jwt.sign({ sub: MEMBER_USER_ID, email: "member@example.com" });
+    const client = connect(token);
+    client.connect();
+    await waitForConnect(client);
+
+    const ack = await new Promise<{ ok: boolean; error?: any }>((resolve) => {
+      // projectId가 uuid가 아닌 잘못된 값을 보냄
+      client.emit(SOCKET_EVENTS.syncJoin, { projectId: "invalid-uuid" }, resolve);
+    });
+
+    expect(ack.ok).toBe(false);
+    expect(ack.error).toBeDefined();
+    expect(ack.error.code).toBe("VALIDATION_ERROR");
+    expect(ack.error.message).toContain("projectId");
+  });
 });
