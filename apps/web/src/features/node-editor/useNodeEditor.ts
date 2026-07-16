@@ -15,11 +15,9 @@ export function useNode(projectId: string, nodeId: string) {
       data?.nodes.find((n) => n.id === nodeId),
   });
 
-  // 캔버스에서 노드를 추가한 직후(자동저장 debounce ≈2s 전) 바로 더블클릭해서
-  // 들어오면 REST 스냅샷엔 아직 없다 — canvasStore(이미 메모리에 있음)로 폴백해
-  // "노드를 찾을 수 없습니다" 오탐을 막는다.
   const localNode = useCanvasStore((s) => s.nodes.find((n) => n.id === nodeId));
-  if (!query.data && localNode) {
+  // 항상 캔버스 스토어(웹소켓 실시간 업데이트가 반영된) 노드를 우선 사용합니다.
+  if (localNode) {
     return { ...query, data: toNodeDTO(localNode) };
   }
   return query;
@@ -49,6 +47,7 @@ export function useSaveNode(projectId: string, nodeId: string) {
         body: JSON.stringify(body),
       }),
     onSuccess: async (saved) => {
+      console.log("1. REST 저장 완료! 소켓 발송 직전", saved);
       // 캔버스 화면(다른 탭 포함)에 실시간 반영 — ProjectCollabLayout이 연결을 들고 있어서
       // 에디터 라우트에서도 emit 가능(예전엔 라우트가 형제라 소켓이 끊겨 있었음).
       if (saved) {
