@@ -73,16 +73,22 @@ async function rawRefresh(): Promise<string | null> {
       method: "POST",
       credentials: "include",
     });
+    console.log("🔄 [rawRefresh] 리프레시 응답 상태:", res.status); // 👈 여기 추가
+    
     if (!res.ok) {
-      await captureSessionEndReason(res); // 다른 기기 로그인 등 사유가 있으면 저장
+      console.log("🚨 [rawRefresh] 리프레시 실패! 상태코드:", res.status); // 👈 여기 추가
+      await captureSessionEndReason(res); 
       return null;
     }
     const data = (await res.json()) as { accessToken?: string };
+    console.log("✅ [rawRefresh] 새 토큰 수령 성공!"); // 👈 여기 추가
     return data.accessToken ?? null;
-  } catch {
+  } catch (err) {
+    console.error("💥 [rawRefresh] 통신 에러 발생:", err); // 👈 여기 추가
     return null;
   }
 }
+
 
 /**
  * 새 access token 발급 — 401 인터셉터·부팅 복원(authStore.bootstrap) 공용.
@@ -124,12 +130,15 @@ async function request<T>(
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: "include" });
 
   if (res.status === 401) {
+    console.log(`🚨 [api] 401 에러 발생 API: ${path} (리프레시 허용여부: ${allowRefresh})`); 
     // access 만료 추정 — 최초 1회만 refresh 후 원요청 재시도(R1.2).
     if (allowRefresh) {
       const newToken = await refreshAccessToken();
       if (newToken) {
         useAuthStore.getState().setAccessToken(newToken);
         return request<T>(path, init, false);
+      }else {
+        console.log(`❌ [api] 리프레시 실패! newToken 없음. 로그아웃으로 튕겨냅니다.`); 
       }
     }
     // refresh 불가/실패 → 세션 종료(R1.3). clearAuth → ProtectedRoute가 반응형으로 /login 전환.
@@ -146,13 +155,16 @@ async function request<T>(
     let errorBody: ErrorResponse | null = null;
     try {
       errorBody = (await res.json()) as ErrorResponse;
+console.log(`💥 [api] 일반 에러 발생 API: ${path} | 상태: ${res.status} | 내용:`, errorBody);
     } catch {
       // JSON 파싱 실패 시 기본 메시지 사용
+      console.log(`💥 [api] 일반 에러 발생 API: ${path} | 상태: ${res.status} (JSON 파싱 실패)`); 
     }
     const err = errorBody?.error;
 
     // 다른 기기 로그인 등으로 서버가 세션을 강제 종료한 경우 로그아웃 — 전용 코드 또는 409+메시지로 감지.
     if (isSessionEnded(res.status, err)) {
+        console.log(`🛑 [api] 서버가 강제로 세션을 종료시켰습니다! (409 에러 등)`); 
       if (err?.message) stashSessionNotice(err.message);
       useAuthStore.getState().clearAuth(); // ProtectedRoute가 반응형으로 /login 전환(하드 리로드 없음)
     }
