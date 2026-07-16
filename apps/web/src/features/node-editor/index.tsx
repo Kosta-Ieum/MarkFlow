@@ -233,7 +233,11 @@ export function NodeEditorPage() {
     );
   }
 
-  const meta = NODE_TYPE_META[type];
+  const displayType = isReadOnly ? (node?.type ?? type) : type;
+  const displayTitle = isReadOnly ? (node?.title ?? title) : title;
+  const displayMarkdown = isReadOnly ? (node?.markdown ?? markdown) : markdown;
+
+  const meta = NODE_TYPE_META[displayType];
 
   const saveStatusLabel =
     saveStatus === "saving"
@@ -283,7 +287,7 @@ export function NodeEditorPage() {
           </label>
           <select
             id="node-type-select"
-            value={type}
+            value={displayType}
             onChange={(e) => setType(e.target.value as NodeType)}
             disabled={isReadOnly}
             className={`rounded-md border px-2 py-0.5 font-mono text-xs ${meta.bgClass} ${meta.borderClass} ${meta.textClass} disabled:cursor-not-allowed disabled:opacity-60`}
@@ -303,7 +307,7 @@ export function NodeEditorPage() {
         <input
           id="node-title-input"
           type="text"
-          value={title}
+          value={displayTitle}
           onChange={(e) => setTitle(e.target.value)}
           disabled={isReadOnly}
           placeholder="제목 없음"
@@ -341,7 +345,7 @@ export function NodeEditorPage() {
       {/* 본문 — MDEditor 전체화면 */}
       <div className="flex min-h-0 flex-1 flex-col" data-color-mode="light">
         <MDEditor
-          value={markdown}
+          value={displayMarkdown}
           onChange={(val) => setMarkdown(val ?? "")}
           height="100%"
           preview={isReadOnly ? "preview" : "live"}
