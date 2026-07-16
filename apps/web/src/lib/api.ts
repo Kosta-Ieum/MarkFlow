@@ -1,7 +1,8 @@
 // fetch 래퍼 + Bearer·credentials·401 인터셉터(단일 refresh 후 원요청 재시도). ADR-0001.
 import type { ErrorResponse } from "@markflow/shared";
 
-const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://localhost:4000";
+// 프록시 서버(로컬 Vite, 배포 Nginx)를 타도록 상대 경로 사용
+const BASE = "/api";
 
 export class ApiError extends Error {
   constructor(
