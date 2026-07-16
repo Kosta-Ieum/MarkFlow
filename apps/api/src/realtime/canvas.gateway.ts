@@ -191,6 +191,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
   @UseGuards(WsJwtGuard)
   @SubscribeWithValidation(SOCKET_EVENTS.nodeUpdate)
   async handleNodeUpdate(@ConnectedSocket() socket: Socket, @MessageBody() body: any): Promise<AckResponse> {
+    console.log("2. 백엔드가 프론트에서 쏜 소켓 이벤트를 받음!", body);
     const { projectId, node } = body;
     const userId = socket.data.userId as string;
 
@@ -226,7 +227,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
 
     const dto: EdgeCreateRequest = { source: edge.source, target: edge.target };
 
-    const created = await this.edgeService.createEdge(projectId, userId, dto);
+    const created = await this.edgeService.createEdge(projectId, userId, dto, edge.id);
     socket.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeAdd, { projectId, edge: created });
     return { ok: true, data: { edge: created } };
   }
