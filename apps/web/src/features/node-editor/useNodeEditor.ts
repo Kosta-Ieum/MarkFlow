@@ -54,6 +54,9 @@ export function useSaveNode(projectId: string, nodeId: string) {
         emitNodeUpdate({ id: saved.id, title: saved.title, markdown: saved.markdown, type: saved.type });
       }
       await qc.invalidateQueries({ queryKey: queryKeys.canvas(projectId) });
+      // 이 PATCH는 소켓 emit(다른 탭 전달용)과 별개로 REST로 직접 저장한 경로라, 저장한
+      // 본인 화면의 히스토리도 새로고침 없이 바로 갱신되도록 여기서 직접 무효화한다.
+      await qc.invalidateQueries({ queryKey: queryKeys.history(projectId) });
     },
   });
 }

@@ -215,6 +215,8 @@ export function HistoryTimeline({ projectId }: HistoryTimelineProps) {
     );
   }
 
+  // 휴지통행 소프트 삭제(DELETE)는 그대로 노출한다 — 영구삭제(purge)는 BE가 애초에
+  // ActivityLog를 안 남겨서(node.service.ts purge()) 필터링할 필요 자체가 없다.
   const activities = data?.history ?? [];
 
   if (activities.length === 0) {

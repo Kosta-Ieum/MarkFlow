@@ -9,5 +9,6 @@ export function createSocket(url: string, opts: Parameters<typeof io>[1]): Socke
   if (import.meta.env.VITE_MOCK_API === "1") {
     return createMockSocket() as unknown as Socket;
   }
-  return io(url, opts);
+  // 빈 문자열이면 socket.io-client가 현재 페이지 origin으로 연결한다(same-origin 프록시용).
+  return io(url || undefined, opts);
 }
