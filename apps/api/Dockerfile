@@ -21,6 +21,7 @@ COPY packages/shared/src    ./packages/shared/src
 COPY packages/shared/tsconfig.json ./packages/shared/
 COPY apps/api/src           ./apps/api/src
 COPY apps/api/tsconfig.json ./apps/api/
+COPY apps/api/openapi.yaml  ./apps/api/
 
 # 빌드 순서: shared → prisma client 생성 → api
 RUN pnpm --filter @markflow/shared build
@@ -49,6 +50,7 @@ COPY --from=builder /app/packages/shared/dist         ./packages/shared/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/dist         ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma       ./apps/api/prisma
+COPY --from=builder /app/apps/api/openapi.yaml ./apps/api/
 
 COPY pnpm-workspace.yaml package.json ./
 
