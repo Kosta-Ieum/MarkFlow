@@ -19,9 +19,9 @@ export function ProjectCollabLayout() {
 
   useEffect(() => {
     if (!projectId) return;
-    // role을 아직 모르면 대기(섣부른 연결 방지). VIEWER는 소켓이 아예 필요 없다 —
-    // 실시간 갱신(멀티커서·소프트락·채팅·히스토리) 없이 REST로 불러온 스냅샷만 본다.
-    if (role === undefined || role === "VIEWER") return;
+    // role을 아직 모르면 대기(섣부른 연결 방지).
+    // VIEWER도 다른 사용자의 움직임을 실시간으로 보기 위해 소켓 연결이 필요하므로 접속을 허용합니다.
+    if (role === undefined) return;
     collab.connect(projectId);
     setActiveCollab(collab);
     return () => {

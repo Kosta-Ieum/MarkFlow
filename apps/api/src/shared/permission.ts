@@ -24,6 +24,10 @@ export async function assertPermission(
   });
 
   if (!member) {
+    const projectExists = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+    if (!projectExists) {
+      throw AppException.notFound("프로젝트를 찾을 수 없습니다");
+    }
     throw AppException.forbidden("프로젝트 멤버가 아닙니다");
   }
 

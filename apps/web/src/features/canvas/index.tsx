@@ -188,7 +188,19 @@ export function CanvasPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    useCanvasStore.getState().loadCanvas(projectId).catch(() => {
+    useCanvasStore.getState().loadCanvas(projectId).catch(async (err) => {
+      // 동적 import로 ApiError를 가져와 404 처리
+      const { ApiError } = await import("../../lib/api");
+      if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
+        if (err.status === 404) {
+          alert("프로젝트가 삭제되어 프로젝트 목록으로 이동합니다.");
+        } else {
+          alert("프로젝트 접근 권한이 없어 목록으로 이동합니다.");
+        }
+        window.location.href = "/projects";
+        return;
+      }
+      
       // BE 캔버스 REST(IEUM-24/25)가 아직 구현 전이면 로드가 실패한다 —
       // 화면설계서 §4.4.2 시드 흐름으로 폴백해 시각 확인을 가능하게 한다.
       if (useCanvasStore.getState().nodes.length === 0) {
