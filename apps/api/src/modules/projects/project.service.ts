@@ -9,10 +9,14 @@ import type {
   ProjectUpdateResponse,
   ProjectDeleteResponse,
 } from "@markflow/shared";
+import { ProjectEventsService } from "../../common/events/project-events.service.js";
 
 @Injectable()
 export class ProjectService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: ProjectEventsService,
+  ) {}
 
   async list(userId: string): Promise<ProjectsResponse> {
     const memberships = await this.prisma.projectMember.findMany({
@@ -109,6 +113,8 @@ export class ProjectService {
 
     // 하드 삭제 — 복구 없음. 하위 Node·Edge·ChatMessage·ActivityLog는 onDelete: Cascade로 함께 제거된다.
     await this.prisma.project.delete({ where: { id: projectId } });
+
+    this.events.emit({ projectId, type: "PROJECT_DELETED" });
 
     return { id: projectId, deleted: true };
   }
