@@ -17,9 +17,19 @@ import {
   type TrashNode,
 } from "../lib/canvasApi";
 import type { CollabAPI } from "../collab/CollabAPI";
+import { queryClient } from "../lib/queryClient";
+import { queryKeys } from "../lib/queryKeys";
 import { useAuthStore } from "./authStore";
 import { useHistoryStore } from "./historyStore";
 import { usePresenceStore } from "./presenceStore";
+
+// 히스토리 전용 실시간 이벤트가 아직 없어(SOCKET_EVENTS 미정의), 구조적 변경(생성·삭제·
+// 복원·연결)을 수행한 "본인" 화면에서도 REST 응답을 기다리지 않고 바로 history 쿼리를
+// 무효화한다 — 원격 수신 쪽 무효화는 useSocketCollab.ts가 별도로 담당.
+function invalidateHistory(projectId: string | null): void {
+  if (!projectId) return;
+  void queryClient.invalidateQueries({ queryKey: queryKeys.history(projectId) });
+}
 
 /** 소프트 락: 다른 사용자가 md 편집 중인 노드인지 — 이동·삭제 차단에 공용으로 쓴다. */
 function isLockedByOther(nodeId: string): boolean {
@@ -99,6 +109,24 @@ function overlapsCard(a: XYPosition, b: XYPosition): boolean {
   return Math.abs(a.x - b.x) < GRID_STEP_X && Math.abs(a.y - b.y) < GRID_STEP_Y;
 }
 
+// 여러 개를 연달아 추가/복원할 때(예: 휴지통 항목을 하나씩 계속 복원), 매번 "지금 보이는
+// 화면"에서 새로 기준점을 잡으면 그사이 사용자가 캔버스를 조금이라도 패닝·줌했을 때 그리드
+// 한 줄이 통째로 빈 것처럼 보이는 이가 생긴다(이전 배치와 새 배치가 서로 다른 기준점에서
+// 시작해 어긋남). 짧은 시간(ORIGIN_REUSE_WINDOW_MS) 안에 연달아 호출되면 같은 기준점을
+// 그대로 재사용해 하나의 그리드로 이어붙게 한다 — 오래 쉬었다 돌아오면(정말 다른 세션) 그때는
+// 새로 보이는 화면 기준으로 다시 잡는다.
+const ORIGIN_REUSE_WINDOW_MS = 5000;
+let lastOrigin: XYPosition | null = null;
+let lastOriginAt = 0;
+
+function resolveOrigin(candidate: XYPosition): XYPosition {
+  const now = Date.now();
+  const reused = lastOrigin && now - lastOriginAt < ORIGIN_REUSE_WINDOW_MS ? lastOrigin : candidate;
+  lastOrigin = reused;
+  lastOriginAt = now;
+  return reused;
+}
+
 /** origin에서 시작해 그리드를 훑으며 existing과 실제로 안 겹치는 첫 자리를 반환한다. */
 function findFreePosition(origin: XYPosition, existing: { position: XYPosition }[]): XYPosition {
   for (let seq = 0; seq < MAX_GRID_SLOTS; seq++) {
@@ -156,11 +184,15 @@ interface CanvasState {
   applyLocalUpdateNode: (id: string, patch: Partial<Pick<MarkdownNodeData, "title" | "markdown" | "type">>) => void;
   applyLocalToggleCollapse: (id: string) => void;
   applyLocalDeleteNode: (id: string) => void;
-  applyLocalRestoreNode: (id: string) => void;
+  /** origin을 주면(화면에 보이는 영역 기준) 그 근처의 안 겹치는 자리로 복원하고, 다른
+   * 클라이언트에도 그 위치로 맞추도록 동기화한다. 생략하면 삭제 전 원래 좌표 그대로 복원. */
+  applyLocalRestoreNode: (id: string, origin?: XYPosition) => void;
   /** 영구삭제(물리 삭제) — §CV-16 */
   applyLocalPermanentDeleteNode: (id: string) => void;
   applyLocalAddEdge: (source: string, target: string) => void;
   applyLocalDeleteEdge: (id: string) => void;
+  /** BE가 엣지 생성 시 자체 ID를 새로 발급하므로, ack로 받은 진짜 ID로 로컬 임시 ID를 교체한다. */
+  reconcileEdgeId: (localId: string, edge: EdgeDTO) => void;
 
   // --- undo/redo(historyStore) 전용 보조 액션 — 경로는 기존 applyLocal*과 동일(emit+저장) ---
   /** 주어진 id 그대로 엣지 재생성 — id가 바뀌면 undo/redo 체인이 끊긴다. 중복 id는 멱등 no-op. */
@@ -357,12 +389,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const node: CanvasNode = {
       id,
       type: "markdown",
-      position: findFreePosition(position, nodes),
+      position: findFreePosition(resolveOrigin(position), nodes),
       data: { title: `새 노드 ${nodes.length + 1}`, markdown: "", type, collapsed: true },
     };
     set((state) => ({ nodes: [...state.nodes, node] }));
     get().scheduleSave();
     activeCollab?.emitNode({ type: "add", node: toNodeDTO(node) });
+    // 노드 추가는 REST 응답 없이 소켓 emit(ack 없음)뿐이라 정확한 완료 시점을 모른다 —
+    // 서버가 ActivityLog까지 쓸 시간을 대략 주고 무효화한다(완벽하진 않아도 새로고침보단 낫다).
+    const { projectId } = get();
+    if (projectId) setTimeout(() => invalidateHistory(projectId), 300);
     useHistoryStore.getState().record({
       label: "노드 생성",
       undo: () => get().applyLocalDeleteNode(id),
@@ -415,7 +451,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // BE가 소프트삭제 처리 후 알아서 다른 클라이언트에 node:delete를 브로드캐스트한다 —
     // 여기서 또 emit하면 중복 브로드캐스트 + 서버가 이미 삭제된 노드를 다시 지우려다
     // 404가 나는 레이스 컨디션이 생긴다(소켓 emit 제거).
-    if (projectId) fireAndForget(deleteNodeApi(projectId, id));
+    if (projectId) {
+      fireAndForget(deleteNodeApi(projectId, id).then(() => invalidateHistory(projectId)));
+    }
     useHistoryStore.getState().record({
       label: "노드 삭제",
       undo: () => {
@@ -434,28 +472,38 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
-  applyLocalRestoreNode: (id) => {
-    const { projectId } = get();
-    set((state) => {
-      const target = state.trashedNodes.find((n) => n.id === id);
-      if (!target) return state;
-      // BE의 restore()는 위치를 안 건드리고 삭제 전 좌표 그대로 돌려준다 — FE도 새 위치를
-      // 계산하지 않고 그대로 복원해야 서버 진실값·다른 클라이언트와 위치가 어긋나지 않는다.
-      const node: CanvasNode = target;
-      return {
-        trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
-        nodes: [...state.nodes, node],
-      };
-    });
-    // BE가 복원 처리 후 알아서 다른 클라이언트에 node:add를 브로드캐스트한다 — 중복 emit 제거.
-    if (projectId) fireAndForget(restoreNodeApi(projectId, id));
+  applyLocalRestoreNode: (id, origin) => {
+    const { projectId, trashedNodes, nodes } = get();
+    const target = trashedNodes.find((n) => n.id === id);
+    if (!target) return;
+    // BE의 restore()는 위치를 안 건드리고 삭제 전 좌표 그대로 돌려준다 — origin이 없으면
+    // (호출자가 화면 기준 위치를 못 구했을 때) 그 좌표를 그대로 쓴다. origin이 있으면
+    // "화면에 보이는 자리에서 순서대로, 안 겹치게" 요구사항대로 새로 자리를 잡는다.
+    const position = origin ? findFreePosition(resolveOrigin(origin), nodes) : target.position;
+    const node: CanvasNode = { ...target, position };
+    set((state) => ({
+      trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
+      nodes: [...state.nodes, node],
+    }));
+    if (projectId) {
+      // BE가 복원 처리 후 알아서 다른 클라이언트에 node:add를 브로드캐스트한다(원래 좌표로) —
+      // 위치 동기화용 nodeUpdate는 반드시 그 REST 응답 이후에 보내야 한다. 먼저/동시에 보내면
+      // 다른 클라이언트엔 아직 이 노드가 없는 상태라(nodeAdd가 아직 도착 전) nodeUpdate가
+      // 조용히 무시되고, 뒤늦게 도착한 nodeAdd의 "원래(옛) 좌표"만 남아 위치가 서로 어긋난다.
+      fireAndForget(
+        restoreNodeApi(projectId, id).then(() => {
+          invalidateHistory(projectId);
+          if (origin) activeCollab?.emitNode({ type: "update", node: { id, position } });
+        }),
+      );
+    }
   },
 
   applyLocalPermanentDeleteNode: (id) => {
     const { projectId } = get();
     set((state) => ({ trashedNodes: state.trashedNodes.filter((n) => n.id !== id) }));
     // BE가 영구삭제 처리 후 알아서 다른 클라이언트에 브로드캐스트한다 — 중복 emit 제거.
-    if (projectId) fireAndForget(purgeNodeApi(projectId, id));
+    if (projectId) fireAndForget(purgeNodeApi(projectId, id).then(() => invalidateHistory(projectId)));
   },
 
   applyLocalAddEdge: (source, target) => {
@@ -505,6 +553,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }));
     get().scheduleSave();
     activeCollab?.emitNode({ type: "update", node: { id, position } });
+  },
+
+  reconcileEdgeId: (localId, edge) => {
+    set((state) => ({
+      edges: state.edges.map((e) =>
+        e.id === localId ? { ...e, id: edge.id, source: edge.source, target: edge.target } : e,
+      ),
+    }));
   },
 
   // --- 원격 수신 적용 (재emit 금지) ---
