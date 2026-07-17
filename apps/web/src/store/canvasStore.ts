@@ -127,6 +127,19 @@ function resolveOrigin(candidate: XYPosition): XYPosition {
   return reused;
 }
 
+// 새 노드 기본 이름 번호(R3) — "현재 개수+1"은 삭제 후 번호가 중복됐다. 캔버스+휴지통의
+// "새 노드 <숫자>" 제목 중 최대 번호+1을 쓰면 눈에 보이는 노드와는 절대 안 겹친다.
+// (동시 생성 시 이론상 중복 가능하나 제목은 중복 허용 — spec 승인된 트레이드오프.)
+const DEFAULT_NODE_TITLE = /^새 노드 (\d+)$/;
+function nextDefaultNodeNumber(titled: { data: { title: string } }[]): number {
+  let max = 0;
+  for (const n of titled) {
+    const m = DEFAULT_NODE_TITLE.exec(n.data.title);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+
 /** origin에서 시작해 그리드를 훑으며 existing과 실제로 안 겹치는 첫 자리를 반환한다. */
 function findFreePosition(origin: XYPosition, existing: { position: XYPosition }[]): XYPosition {
   for (let seq = 0; seq < MAX_GRID_SLOTS; seq++) {
@@ -383,14 +396,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   applyLocalAddNode: (position, type = "idea") => {
     const id = newId();
-    const { nodes } = get();
+    const { nodes, trashedNodes } = get();
     // 매번 같은 좌표·이름으로 생성하면 연속 추가 시 노드가 그대로 겹친다 — 현재 캔버스에 있는
     // 노드들과 실제로 안 겹치는 자리를 찾아 배치한다(findFreePosition).
     const node: CanvasNode = {
       id,
       type: "markdown",
       position: findFreePosition(resolveOrigin(position), nodes),
-      data: { title: `새 노드 ${nodes.length + 1}`, markdown: "", type, collapsed: true },
+      data: {
+        title: `새 노드 ${nextDefaultNodeNumber([...nodes, ...trashedNodes])}`,
+        markdown: "",
+        type,
+        collapsed: true,
+      },
     };
     set((state) => ({ nodes: [...state.nodes, node] }));
     get().scheduleSave();
