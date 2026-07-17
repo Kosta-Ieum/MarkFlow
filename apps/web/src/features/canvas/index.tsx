@@ -17,7 +17,7 @@ import type { Node as FlowNode, OnNodeDrag, XYPosition } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { canEdit } from "../../lib/permissions";
-import { CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
+import { beginNodeDrag, CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
 import { useAuthStore } from "../../store/authStore";
 import { usePresenceStore } from "../../store/presenceStore";
 import { CursorOverlay } from "./CursorOverlay";
@@ -158,6 +158,7 @@ function CanvasSurface({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStart={(_, _node, dragged) => beginNodeDrag(dragged)}
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
@@ -188,7 +189,7 @@ function CanvasSurface({
       <TrashPanel ref={trashRef} isDragOver={isDragOverTrash} />
       {/* CanvasSurface 자신이 이미 RightPanel과 flex 형제라 패널이 열리면 폭이 저절로
           줄어든다 — 여기서 또 offsetRight로 밀면 좁아진 영역 밖으로 나가 안 보이게 된다
-          (이중 보정 버그). 우측 패널 폭 보정은 필요 없다. */}
+          (이중 보정 버그). 우측 패널 폭 보정은 필요 없다. undo/redo 버튼은 pill 내부 인라인. */}
       <ZoomControls />
     </div>
   );

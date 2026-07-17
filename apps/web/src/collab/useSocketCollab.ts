@@ -12,6 +12,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { useAuthStore } from "../store/authStore";
 import { useCanvasStore, fromNodeDTO } from "../store/canvasStore";
 import { useChatStore } from "../store/chatStore";
+import { useHistoryStore } from "../store/historyStore";
 import { usePresenceStore } from "../store/presenceStore";
 import type { CollabAPI } from "./CollabAPI";
 
@@ -91,7 +92,12 @@ export function useSocketCollab(projectId: string): CollabAPI {
       useCanvasStore.getState().applyRemoteSnapshot(snapshot.nodes, snapshot.edges);
     };
     socket.on(SOCKET_EVENTS.syncInit, applySnapshot);
-    socket.on(SOCKET_EVENTS.syncResync, applySnapshot);
+    socket.on(SOCKET_EVENTS.syncResync, (snapshot: CanvasSnapshot) => {
+      applySnapshot(snapshot);
+      // 서버 강제 재동기화 = 로컬 전제가 무효 — undo/redo 스택을 실제 상태와 어긋나기 전에
+      // 통째로 비운다(design §5, R5.3 완화 정책).
+      useHistoryStore.getState().clear();
+    });
 
     socket.on(SOCKET_EVENTS.nodeAdd, ({ node }: { node: NodeDTO }) => {
       useCanvasStore.getState().applyRemoteAddNode(fromNodeDTO(node));

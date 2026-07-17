@@ -7,6 +7,7 @@ import { Outlet, useParams } from "react-router-dom";
 
 import { useCollaboration } from "../../collab/useCollaboration";
 import { setActiveCollab } from "../../store/canvasStore";
+import { useHistoryStore } from "../../store/historyStore";
 import { useCanvasSnapshot } from "../node-editor/useNodeEditor";
 
 export function ProjectCollabLayout() {
@@ -30,6 +31,14 @@ export function ProjectCollabLayout() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, role]);
+
+  // undo/redo 스택 수명(R6.2) = 이 레이아웃 = 프로젝트 체류. 프로젝트 이탈·전환 시 초기화하고,
+  // 캔버스↔노드 에디터 라우트 이동은 레이아웃이 유지되므로 스택도 보존된다.
+  useEffect(() => {
+    return () => {
+      useHistoryStore.getState().clear();
+    };
+  }, [projectId]);
 
   return <Outlet />;
 }

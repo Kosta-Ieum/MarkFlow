@@ -1,10 +1,11 @@
-// 줌 컨트롤 — 화면설계서 §4.4.3: 하단 우측 화이트 필, 줌% / − / + / ⊙(화면 맞춤)
+// 줌 컨트롤 — 화면설계서 §4.4.3: 하단 우측 화이트 필, ↶↷(undo/redo) / 줌% / − / + / ⊙(화면 맞춤)
 // 우측 패널 폭 보정은 필요 없다 — 이 컴포넌트가 그려지는 CanvasSurface 자체가 이미
 // RightPanel과 flex 형제라 패널이 열리면 폭이 저절로 줄어든다(과거엔 여기서 offsetRight로
 // 또 밀어서 좁아진 영역 밖으로 나가 안 보이는 버그가 있었다).
 import { useReactFlow, useViewport } from "@xyflow/react";
 
 import { DEFAULT_VIEWPORT } from "./constants";
+import { UndoRedoControls } from "./UndoRedoControls";
 
 export function ZoomControls() {
   const { zoom } = useViewport();
@@ -14,6 +15,8 @@ export function ZoomControls() {
     <div
       className="absolute bottom-6 right-6 z-10 flex items-center gap-1 rounded-full border border-line bg-surface px-2 py-1.5 shadow-sm"
     >
+      <UndoRedoControls />
+      <span className="h-4 w-px bg-line" aria-hidden="true" />
       <span className="w-10 text-center font-mono text-xs text-secondary" aria-live="polite">
         {Math.round(zoom * 100)}%
       </span>
