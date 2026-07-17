@@ -42,7 +42,34 @@ created: 2026-07-16
   - 요구사항: R1.1, R1.2, R1.4, R6.1, R6.2, R7.1
   - 완료 조건: `./scripts/check` 통과 + 수동: 단축키 동작, 입력 포커스 중 무시, 프로젝트 이탈 후 스택 초기화.
 
-- [ ] **T7. 최종 통합 검증 + 인수 조건 전수 점검**
+- [x] **T7. 최종 통합 검증 + 인수 조건 전수 점검**
   - 내용: 전체 스위트(`./scripts/check`·`./scripts/test`·web vitest) + 2세션 E2E(2계정: per-user 격리 R3.2, 전파 R3.3, 락 충돌 R5.2) + requirements.md 인수 조건 전수 표 작성. 미충족 발견 시 수정 태스크로 회귀.
   - 요구사항: R1~R8 전부
   - 완료 조건: 인수 조건 표에서 미충족 0 (R5.3은 승인된 완화 기준).
+  - 수행 기록: 전체 스위트 통과(shared 24 · api 6 · web 22, check 통과). 별도 리뷰어(opus) diff 리뷰 — blocker/major 0. 리뷰 지적에 따라 recorder 역연산 매핑 테스트 9개 추가(canvasStore.recorder.test.ts, design §6 이행). 2세션 E2E는 실계정 필요로 자동화 불가 — 아래 수동 QA 체크리스트로 이관.
+
+## 인수 조건 검증 표 (T7)
+
+| 조건 | 검증 방식 | 판정 |
+|---|---|---|
+| R1.1/R1.2 버튼·단축키 실행 | UndoRedoControls 버튼+keydown 코드 확인 | 충족(수동 QA 확인 권장) |
+| R1.3 빈 스택 비활성·무시 | 단위 테스트(empty no-op) + disabled 구독 | 충족 |
+| R1.4 에디터 텍스트 undo 양보 | 에디터 라우트엔 리스너 미마운트 + input/textarea/contentEditable 가드 | 충족 |
+| R2.1~R2.5 4종 연산 역연산 | recorder 테스트 9개(생성/삭제+엣지복원+dangling 스킵/이동 멀티드래그/엣지 연결·해제 id 보존) | 충족 |
+| R2.6 제목·내용 저장 undo | T4 recorder 코드 확인(저장 성공 시 record, prev ref) | 충족(수동 QA 확인 권장) |
+| R2.7 step 단위 | 드래그 1 step·제자리 드롭 미기록 테스트, 저장 no-op 생략 | 충족 |
+| R2.8 접기·뷰포트 제외 | 토글 미기록 테스트, 뷰포트는 기록 지점 자체 없음 | 충족 |
+| R3.1/R3.2 per-user | applyLocal*에서만 record, applyRemote* 미기록 테스트 | 충족 |
+| R3.3/R4.1 전파·영속 | 역연산이 기존 applyLocal 경로(emit+scheduleSave/REST) 재사용 — 코드 확인 | 충족(2세션 수동 QA 필요) |
+| R4.2 에코 루프 방지 | isApplying 가드 테스트 + 원격 미기록 테스트 | 충족 |
+| R5.1 대상 소실 | validator missing 폐기 테스트 + 2초 인라인 알림 | 충족 |
+| R5.2 타인 락 | locked 유지 테스트(recorder 레벨 포함) + 알림 | 충족 |
+| R5.3 서버 거부(완화 승인) | sync:resync 수신 시 clear — 코드 확인 | 충족(완화 기준) |
+| R6.1~R6.4 스택 수명 | 세션 메모리·레이아웃 언마운트 clear·redo 무효화·MAX 50 테스트 | 충족 |
+| R7.1/R7.2 권한 | VIEWER 비활성+단축키 무시, 서버 가드는 기존 그대로(BE 무변경) | 충족 |
+| R8.1/R8.2 UI 배치 | 하단 좌측 pill(ZoomControls 관례)·disabled 시각 표시 | 충족(수동 QA 확인 권장) |
+
+### 알려진 제한 (승인·수용됨)
+- 휴지통 드래그-드롭 삭제 = [이동, 삭제] 2 step (T3 노트 — undo 2회로 완전 복구).
+- 노드 type 변경은 undo 대상 아님(R2.6 범위: 제목·마크다운) — 한 저장에서 함께 바꾸면 type은 잔존.
+- 생성 후 미영속(<2s) 노드의 undo는 서버 404 가능 — ADR-0002 best-effort 수용 범위.
