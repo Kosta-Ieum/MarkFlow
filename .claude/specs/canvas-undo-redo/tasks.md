@@ -9,7 +9,7 @@ created: 2026-07-16
 > 체크박스가 실행 상태의 단일 진실 공급원이다. 태스크 완료 = 완료 조건 + 연결된 인수 조건 충족 + 관련 테스트 통과.
 > 전 태스크 apps/web 국한 (BE·shared·openapi 무변경, ADR-0002). 검증 = `./scripts/check` + apps/web vitest.
 
-- [ ] **T1. historyStore + vitest 셋업 + 단위 테스트**
+- [x] **T1. historyStore + vitest 셋업 + 단위 테스트**
   - 내용: `apps/web/src/store/historyStore.ts` 신규 — `HistoryCommand {label, undo(), redo(), nodeIds?, edgeIds?}`, `undoStack/redoStack`, `record`(redoStack 비움 + MAX_HISTORY=50 상한), `undo/redo`(실행 전 유효성 훅 호출), `clear`, `canUndo/canRedo`. 유효성 검사는 주입 가능한 `validate(cmd)` 콜백(기본: canvasStore·presenceStore 조회 — 대상 존재(R5.1)/타인 락(R5.2) 검사, 무효 사유 반환). apps/web에 vitest 설정 추가(packages/shared 구성 준용, `pnpm --filter @markflow/web test` 동작) + historyStore 단위 테스트(record→undo→redo 순서, redo 무효화, 상한, clear, 빈 스택 no-op, 무효 커맨드 폐기/락 유지 정책).
   - 요구사항: R1.3, R3.1, R5.1, R5.2, R6.1, R6.3, R6.4
   - 완료 조건: `pnpm --filter @markflow/web test` 통과 + `./scripts/check` 통과.
