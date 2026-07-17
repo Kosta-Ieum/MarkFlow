@@ -1,5 +1,5 @@
 // Undo/Redo 컨트롤 — 하단 좌측 pill(ZoomControls의 우측 pill과 대칭 배치).
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { canEdit } from "../../lib/permissions";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -23,24 +23,50 @@ export function UndoRedoControls() {
     [],
   );
 
-  const showFeedback = (message: string) => {
+  const showFeedback = useCallback((message: string) => {
     if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     setFeedback(message);
     feedbackTimeoutRef.current = setTimeout(() => setFeedback(null), FEEDBACK_DURATION_MS);
-  };
+  }, []);
 
-  // T6에서 키보드 단축키가 같은 핸들러를 재사용한다.
-  const handleUndo = () => {
+  // 버튼과 키보드 단축키가 같은 핸들러를 공유한다 — 피드백 표시 경로 단일화.
+  const handleUndo = useCallback(() => {
     const result = useHistoryStore.getState().undo();
     if (result.status === "missing") showFeedback("되돌릴 대상이 이미 변경되었습니다");
     else if (result.status === "locked") showFeedback("다른 사용자가 편집 중인 노드입니다");
-  };
+  }, [showFeedback]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     const result = useHistoryStore.getState().redo();
     if (result.status === "missing") showFeedback("되돌릴 대상이 이미 변경되었습니다");
     else if (result.status === "locked") showFeedback("다른 사용자가 편집 중인 노드입니다");
-  };
+  }, [showFeedback]);
+
+  // 키보드 단축키(R1.1/R1.2) — (meta|ctrl)+Z = undo, +Shift 또는 ctrl+Y = redo.
+  // 노드 에디터는 별도 라우트(이 컴포넌트 미마운트)라 리스너 자체가 없어 텍스트 undo와
+  // 자연 분리되고(R1.4), 캔버스 위 인라인 입력(채팅·제목 등) 포커스 중엔 양보한다.
+  useEffect(() => {
+    if (readOnly) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey && !event.ctrlKey) return;
+      const key = event.key.toLowerCase();
+      const isUndo = key === "z" && !event.shiftKey;
+      const isRedo = (key === "z" && event.shiftKey) || key === "y";
+      if (!isUndo && !isRedo) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (isUndo) handleUndo();
+      else handleRedo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [readOnly, handleUndo, handleRedo]);
 
   return (
     <div className="absolute bottom-6 left-6 z-10">

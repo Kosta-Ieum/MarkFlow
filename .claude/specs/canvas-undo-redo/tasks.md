@@ -36,7 +36,8 @@ created: 2026-07-16
   - 요구사항: R1.1, R1.2, R5.1, R5.2(알림), R7.1, R8.1, R8.2
   - 완료 조건: `./scripts/check` 통과 + 수동: 버튼 활성/비활성 전환, VIEWER 비활성, 무효 시 메시지 노출.
 
-- [ ] **T6. 키보드 단축키 + 스택 수명 배선**
+- [x] **T6. 키보드 단축키 + 스택 수명 배선**
+  - 구현 노트: keydown 리스너는 CanvasSurface가 아니라 그 자식 UndoRedoControls에 두었다(동일 수명 + T5 핸들러·피드백 재사용). 에디터 라우트는 이 컴포넌트가 미마운트라 R1.4 자연 충족.
   - 내용: ① `CanvasSurface`에 window keydown — (meta|ctrl)+Z→undo, +Shift(또는 ctrl+Y)→redo, `event.target`이 input/textarea/contenteditable이면 무시(R1.4), readOnly 무시, 언마운트 해제 ② 스택 수명: `ProjectCollabLayout` 언마운트(프로젝트 이탈) 시 `historyStore.clear()`(R6.2 — 캔버스↔에디터 이동은 유지) ③ `sync:resync` 수신 시(useSocketCollab) `clear()` — 서버 강제 재동기화 후 불일치 차단(design §5).
   - 요구사항: R1.1, R1.2, R1.4, R6.1, R6.2, R7.1
   - 완료 조건: `./scripts/check` 통과 + 수동: 단축키 동작, 입력 포커스 중 무시, 프로젝트 이탈 후 스택 초기화.
