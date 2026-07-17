@@ -14,7 +14,7 @@ created: 2026-07-16
   - 요구사항: R1.3, R3.1, R5.1, R5.2, R6.1, R6.3, R6.4
   - 완료 조건: `pnpm --filter @markflow/web test` 통과 + `./scripts/check` 통과.
 
-- [ ] **T2. canvasStore 보조 액션 (id 보존 엣지 재생성 · 위치 재적용)**
+- [x] **T2. canvasStore 보조 액션 (id 보존 엣지 재생성 · 위치 재적용)**
   - 내용: `canvasStore.ts`에 ① `applyLocalAddEdgeWithId(edge: EdgeDTO)` — 기존 applyLocalAddEdge와 동일 경로(emit `edge:add` + scheduleSave)이되 주어진 id 사용(undo/redo 시 엣지 id 보존, 중복 id 멱등 가드) ② `applyLocalMoveNode(id, position)` — 위치만 재적용 + emit `node:update {id, position}` + scheduleSave. 기존 액션·에코 규칙(applyRemote는 emit 금지) 불변.
   - 요구사항: R2.3, R2.4, R2.5, R4.1
   - 완료 조건: `./scripts/check` 통과. 두 액션이 emit+scheduleSave 경로를 타는 것 diff 확인.

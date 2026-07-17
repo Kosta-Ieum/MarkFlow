@@ -153,6 +153,12 @@ interface CanvasState {
   applyLocalAddEdge: (source: string, target: string) => void;
   applyLocalDeleteEdge: (id: string) => void;
 
+  // --- undo/redo(historyStore) 전용 보조 액션 — 경로는 기존 applyLocal*과 동일(emit+저장) ---
+  /** 주어진 id 그대로 엣지 재생성 — id가 바뀌면 undo/redo 체인이 끊긴다. 중복 id는 멱등 no-op. */
+  applyLocalAddEdgeWithId: (edge: EdgeDTO) => void;
+  /** 드래그 없이 위치만 재적용(이동 되돌리기) — 커밋된 드래그와 동일하게 전파. */
+  applyLocalMoveNode: (id: string, position: XYPosition) => void;
+
   applyRemoteAddNode: (node: CanvasNode) => void;
   applyRemoteUpdateNode: (id: string, patch: Partial<MarkdownNodeData>, position?: XYPosition) => void;
   applyRemoteDeleteNode: (id: string) => void;
@@ -403,6 +409,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({ edges: state.edges.filter((e) => e.id !== id) }));
     get().scheduleSave();
     activeCollab?.emitEdge({ type: "delete", edgeId: id });
+  },
+
+  applyLocalAddEdgeWithId: (edge) => {
+    if (get().edges.some((e) => e.id === edge.id)) return;
+    const next: Edge = { id: edge.id, source: edge.source, target: edge.target };
+    set((state) => ({ edges: [...state.edges, next] }));
+    get().scheduleSave();
+    activeCollab?.emitEdge({ type: "add", edge: next });
+  },
+
+  applyLocalMoveNode: (id, position) => {
+    // 소프트 락 차단은 applyLocalDeleteNode와 동일 관례 — 최종 방어는 서버·historyStore validator.
+    if (isLockedByOther(id)) return;
+    set((state) => ({
+      nodes: state.nodes.map((n) => (n.id === id ? { ...n, position } : n)),
+    }));
+    get().scheduleSave();
+    activeCollab?.emitNode({ type: "update", node: { id, position } });
   },
 
   // --- 원격 수신 적용 (재emit 금지) ---
