@@ -1,4 +1,5 @@
-// Undo/Redo 컨트롤 — 하단 좌측 pill(ZoomControls의 우측 pill과 대칭 배치).
+// Undo/Redo 컨트롤 — ZoomControls(하단 우측 pill) 안에 인라인 배치되는 버튼 묶음.
+// 키보드 단축키 리스너도 여기 있으므로 캔버스 화면 동안 항상 마운트되어야 한다.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { canEdit } from "../../lib/permissions";
@@ -68,39 +69,38 @@ export function UndoRedoControls() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [readOnly, handleUndo, handleRedo]);
 
+  // 자체 pill 없이 버튼 묶음만 렌더 — ZoomControls의 하단 우측 pill 안에 인라인으로 들어간다.
   return (
-    <div className="absolute bottom-6 left-6 z-10">
-      <div className="relative flex items-center gap-1 rounded-full border border-line bg-surface px-2 py-1.5 shadow-sm">
-        {feedback && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="absolute -top-9 left-0 whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1 text-xs text-secondary shadow-sm"
-          >
-            {feedback}
-          </div>
-        )}
-        <button
-          type="button"
-          aria-label="실행 취소"
-          title="실행 취소 (Ctrl/Cmd+Z)"
-          disabled={readOnly || !canUndo}
-          onClick={handleUndo}
-          className="grid h-7 w-7 place-items-center rounded-full text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+    <div className="relative flex items-center gap-1">
+      {feedback && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute -top-9 right-0 whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1 text-xs text-secondary shadow-sm"
         >
-          ↶
-        </button>
-        <button
-          type="button"
-          aria-label="다시 실행"
-          title="다시 실행 (Ctrl/Cmd+Shift+Z)"
-          disabled={readOnly || !canRedo}
-          onClick={handleRedo}
-          className="grid h-7 w-7 place-items-center rounded-full text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-          ↷
-        </button>
-      </div>
+          {feedback}
+        </div>
+      )}
+      <button
+        type="button"
+        aria-label="실행 취소"
+        title="실행 취소 (Ctrl/Cmd+Z)"
+        disabled={readOnly || !canUndo}
+        onClick={handleUndo}
+        className="grid h-7 w-7 place-items-center rounded-full text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      >
+        ↶
+      </button>
+      <button
+        type="button"
+        aria-label="다시 실행"
+        title="다시 실행 (Ctrl/Cmd+Shift+Z)"
+        disabled={readOnly || !canRedo}
+        onClick={handleRedo}
+        className="grid h-7 w-7 place-items-center rounded-full text-secondary hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      >
+        ↷
+      </button>
     </div>
   );
 }

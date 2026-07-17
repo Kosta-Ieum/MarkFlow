@@ -27,7 +27,6 @@ import { MarkdownNodeCard } from "./MarkdownNodeCard";
 import { RightPanel, RIGHT_PANEL_EXPANDED_WIDTH } from "./RightPanel";
 import { seedEdges, seedNodes } from "./seedNodes";
 import { TrashPanel } from "./TrashPanel";
-import { UndoRedoControls } from "./UndoRedoControls";
 import { ZoomControls } from "./ZoomControls";
 
 const nodeTypes = { markdown: MarkdownNodeCard };
@@ -173,7 +172,7 @@ function CanvasSurface({
       </ReactFlow>
       <CursorOverlay />
       <TrashPanel ref={trashRef} isDragOver={isDragOverTrash} />
-      <UndoRedoControls />
+      {/* undo/redo 버튼은 ZoomControls pill 내부에 인라인 배치 */}
       <ZoomControls offsetRight={rightPanelExpanded ? rightPanelOffset : 0} />
     </div>
   );

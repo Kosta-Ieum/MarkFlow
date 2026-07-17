@@ -1,7 +1,8 @@
-// 줌 컨트롤 — 화면설계서 §4.4.3: 하단 우측 화이트 필, 줌% / − / + / ⊙(화면 맞춤)
+// 줌 컨트롤 — 화면설계서 §4.4.3: 하단 우측 화이트 필, ↶↷(undo/redo) / 줌% / − / + / ⊙(화면 맞춤)
 import { useReactFlow, useViewport } from "@xyflow/react";
 
 import { DEFAULT_VIEWPORT } from "./constants";
+import { UndoRedoControls } from "./UndoRedoControls";
 
 interface ZoomControlsProps {
   /** 우측 패널이 펼쳐져 있으면 그 너비만큼 띄워 가리지 않게 한다 (§4.4.3) */
@@ -17,6 +18,8 @@ export function ZoomControls({ offsetRight = 0 }: ZoomControlsProps) {
       className="absolute bottom-6 z-10 flex items-center gap-1 rounded-full border border-line bg-surface px-2 py-1.5 shadow-sm transition-[right] duration-200"
       style={{ right: 24 + offsetRight }}
     >
+      <UndoRedoControls />
+      <span className="h-4 w-px bg-line" aria-hidden="true" />
       <span className="w-10 text-center font-mono text-xs text-secondary" aria-live="polite">
         {Math.round(zoom * 100)}%
       </span>

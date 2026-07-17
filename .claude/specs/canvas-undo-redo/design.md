@@ -86,7 +86,7 @@ Undo 클릭/Ctrl+Z
 
 ### UndoRedoControls (신규: `apps/web/src/features/canvas/UndoRedoControls.tsx`)
 - **책임**: 하단 도구모음에 Undo·Redo 버튼(아이콘) 렌더, `historyStore` 구독.
-- **배치**: `ZoomControls`와 같은 하단 영역에 별도 pill(좌하단 또는 줌 컨트롤 왼쪽). `canvas/index.tsx`의 `CanvasSurface` 하위에 추가 → store/`useReactFlow` 접근 가능.
+- **배치**: `ZoomControls`(하단 우측 pill) **내부에 인라인** — [↶ ↷ | 줌% − + ⊙] 구성(2026-07-17 사용자 요청으로 별도 좌하단 pill에서 이동). 키보드 리스너도 이 컴포넌트에 있어 캔버스 화면 동안 상시 마운트.
 - **상태**: `disabled = !canUndo() (또는 !canRedo()) || readOnly`. `readOnly = role!==null && !canEdit(role)`(기존 패턴, R7.1).
 - **근거 요구사항**: R7.1, R8.1, R8.2.
 

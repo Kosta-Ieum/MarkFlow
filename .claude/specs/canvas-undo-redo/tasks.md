@@ -32,6 +32,7 @@ created: 2026-07-16
   - 완료 조건: `./scripts/check` 통과 + 수동: 내용 수정·저장→캔버스 복귀→undo 시 이전 내용으로 (상대 화면 동일), redo 재적용.
 
 - [x] **T5. UndoRedoControls (하단 좌측 pill) + 피드백**
+  - 후속 변경(2026-07-17, 사용자 요청): 별도 좌하단 pill → ZoomControls pill 내부 인라인 배치로 이동. 버튼·피드백·단축키 로직 불변.
   - 내용: `apps/web/src/features/canvas/UndoRedoControls.tsx` 신규 — 하단 **좌측** 별도 pill(ZoomControls 스타일 준용, MiniMap과 겹침 회피), Undo/Redo 아이콘 버튼, `canUndo/canRedo`·`readOnly(canEdit)` 비활성(R7.1, R8.2), aria-label. R5 무효/락 시 피드백: 기존 토스트 시스템이 없으므로 pill 인근 2초 인라인 메시지(경량, 신규 전역 시스템 도입 금지). `canvas/index.tsx` CanvasSurface에 배치.
   - 요구사항: R1.1, R1.2, R5.1, R5.2(알림), R7.1, R8.1, R8.2
   - 완료 조건: `./scripts/check` 통과 + 수동: 버튼 활성/비활성 전환, VIEWER 비활성, 무효 시 메시지 노출.
