@@ -3,6 +3,7 @@
 // + IEUM-28 [F1-2.2] 휴지통 드래그드롭 + IEUM-34 [F1-3.1] 실시간 소켓 연결
 // + IEUM-35 [F1-3.2] 멀티커서·소프트 락 UI.
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import { useParams } from "react-router-dom";
 import {
   Background,
@@ -12,7 +13,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
-import type { Node as FlowNode, OnNodeDrag } from "@xyflow/react";
+import type { Node as FlowNode, OnNodeDrag, XYPosition } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { canEdit } from "../../lib/permissions";
@@ -24,7 +25,7 @@ import { DeletableEdge } from "./DeletableEdge";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
 import { LeftSidebar } from "./LeftSidebar";
 import { MarkdownNodeCard } from "./MarkdownNodeCard";
-import { RightPanel, RIGHT_PANEL_EXPANDED_WIDTH } from "./RightPanel";
+import { RightPanel } from "./RightPanel";
 import { seedEdges, seedNodes } from "./seedNodes";
 import { TrashPanel } from "./TrashPanel";
 import { ZoomControls } from "./ZoomControls";
@@ -41,12 +42,14 @@ function isPointInRect(x: number, y: number, rect: DOMRect): boolean {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
+// 새 노드 생성 위치 기준점 — 캔버스 컨테이너(화면에 보이는 영역) 좌상단에서 이만큼
+// 안쪽 지점부터 빈 자리를 찾는다(화면 밖에 생성되면 찾기 어렵다는 피드백 반영).
+const ADD_NODE_ORIGIN_MARGIN = 96;
+
 function CanvasSurface({
-  rightPanelExpanded,
-  rightPanelOffset,
+  addNodeOriginRef,
 }: {
-  rightPanelExpanded: boolean;
-  rightPanelOffset: number;
+  addNodeOriginRef: MutableRefObject<() => XYPosition>;
 }) {
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -61,6 +64,18 @@ function CanvasSurface({
   // (프론트 비활성화는 UX 가드일 뿐, 최종 방어는 서버 — .claude/rules/frontend.md)
   const readOnly = role !== null && !canEdit(role);
   const { screenToFlowPosition } = useReactFlow();
+
+  // "+"로 노드를 추가할 때, 화면에 보이는 캔버스 영역 좌상단 근처부터 빈 자리를 찾도록
+  // 좌표 계산 함수를 ref에 매 렌더 최신화해둔다(LeftSidebar 클릭 → CanvasPage가 호출).
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  addNodeOriginRef.current = () => {
+    const rect = surfaceRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return screenToFlowPosition({
+      x: rect.left + ADD_NODE_ORIGIN_MARGIN,
+      y: rect.top + ADD_NODE_ORIGIN_MARGIN,
+    });
+  };
 
   // 소프트 락: 다른 사용자가 md 편집 중인 노드는 드래그 자체를 시작 못 하게 막는다
   // (§CV realtime — 삭제는 canvasStore.applyLocalDeleteNode가 한 곳에서 막음).
@@ -130,7 +145,7 @@ function CanvasSurface({
   }, []);
 
   return (
-    <div className="relative h-full flex-1">
+    <div ref={surfaceRef} className="relative h-full flex-1">
       {/* VIEWER는 편집 자체를 못 하니 저장 상태 표시가 의미 없다 — 뷰어에겐 아예 숨긴다. */}
       {!readOnly && (
         <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
@@ -171,7 +186,10 @@ function CanvasSurface({
       </ReactFlow>
       <CursorOverlay />
       <TrashPanel ref={trashRef} isDragOver={isDragOverTrash} />
-      <ZoomControls offsetRight={rightPanelExpanded ? rightPanelOffset : 0} />
+      {/* CanvasSurface 자신이 이미 RightPanel과 flex 형제라 패널이 열리면 폭이 저절로
+          줄어든다 — 여기서 또 offsetRight로 밀면 좁아진 영역 밖으로 나가 안 보이게 된다
+          (이중 보정 버그). 우측 패널 폭 보정은 필요 없다. */}
+      <ZoomControls />
     </div>
   );
 }
@@ -212,9 +230,14 @@ export function CanvasPage() {
   const role = useCanvasStore((s) => s.role);
   const readOnly = role !== null && !canEdit(role);
 
+  // CanvasPage는 ReactFlowProvider 밖(그 자체를 렌더하는 쪽)이라 useReactFlow를 못 쓴다 —
+  // 실제 화면 좌표 계산은 Provider 안의 CanvasSurface가 담당하고, 이 ref로 그 결과 함수를
+  // 최신 상태로 받아온다("+"를 누른 시점의 화면에 보이는 영역 기준으로 위치를 정하기 위함).
+  const addNodeOriginRef = useRef<() => XYPosition>(() => ({ x: 0, y: 0 }));
+
   const handleAddNode = () => {
     if (readOnly) return;
-    applyLocalAddNode({ x: 0, y: 0 });
+    applyLocalAddNode(addNodeOriginRef.current());
   };
 
   return (
@@ -228,7 +251,7 @@ export function CanvasPage() {
           nodeCount={nodes.length}
           nodes={nodes.map((n) => ({ id: n.id, title: n.data.title }))}
         />
-        <CanvasSurface rightPanelExpanded={rightExpanded} rightPanelOffset={RIGHT_PANEL_EXPANDED_WIDTH} />
+        <CanvasSurface addNodeOriginRef={addNodeOriginRef} />
         {/* VIEWER는 소켓이 필요 없다 — 채팅/히스토리도 실시간 계약 위에 있으므로 아예 숨긴다(회색 비활성이 아니라 미노출). */}
         {role !== "VIEWER" && (
           <RightPanel

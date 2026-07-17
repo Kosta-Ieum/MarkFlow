@@ -4,6 +4,9 @@ import react from "@vitejs/plugin-react";
 export default defineConfig(({ mode }) => {
   // 모노레포 구조 특성상 루트 폴더의 .env를 명시적으로 읽어옵니다.
   const env = loadEnv(mode, "../..", "");
+  // REST·소켓 모두 같은 Nest 서버(canvas.gateway는 REST와 같은 HTTP 서버 위에 얹힘)이므로
+  // 프록시 대상은 하나만 있으면 된다.
+  const backendTarget = env.VITE_API_BASE || "http://localhost:4000";
 
   return {
     plugins: [react()],
@@ -12,9 +15,16 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         "/api": {
-          target: env.VITE_API_BASE || "http://localhost:4000",
+          target: backendTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ""),
+        },
+        // socket.io-client 기본 경로 — ws:true로 웹소켓 업그레이드까지 프록시해야
+        // 브라우저가 cross-site 핸드셰이크로 인식해 연결을 막는 문제를 피할 수 있다.
+        "/socket.io": {
+          target: backendTarget,
+          changeOrigin: true,
+          ws: true,
         },
       },
     },

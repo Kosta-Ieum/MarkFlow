@@ -11,6 +11,7 @@
 // 드래그 중에는 좌표를 캔버스 컨테이너 안쪽으로만 강제해 좌/우 패널 밑에 숨는 것을 막는다.
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import type { ForwardedRef } from "react";
+import { useReactFlow } from "@xyflow/react";
 import MDEditor from "@uiw/react-md-editor";
 
 import { canEdit } from "../../lib/permissions";
@@ -36,6 +37,9 @@ const BUTTON_HEIGHT_APPROX = 36;
 const RIGHT_ZONE_WIDTH = 180;
 // 클릭과 드래그를 가르는 픽셀 임계값 — 너무 낮으면 클릭 중 손 떨림이 드래그로 오인된다.
 const DRAG_THRESHOLD = 10;
+// 복원 위치 기준점 — 캔버스 컨테이너 좌상단에서 이만큼 안쪽 지점부터 빈 자리를 찾는다
+// (화면 밖이나 다른 노드 뒤에 복원되어 못 찾는 문제 방지).
+const RESTORE_ORIGIN_MARGIN = 96;
 
 type Anchor = "left" | "right";
 
@@ -97,6 +101,11 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
 ) {
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // 일괄 삭제 — 항목이 많을 때 하나씩 지우는 게 번거롭다는 피드백으로 추가.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // 내용 유/무로 나눠 볼 수 있게 — 일괄 삭제 시 내용 있는 항목을 실수로 같이 지우는 것 방지.
+  const [contentFilter, setContentFilter] = useState<"all" | "has" | "empty">("all");
   const myId = useAuthStore((s) => s.user?.id);
   const storageKey = storageKeyFor(myId);
   const [pos, setPos] = useState<TrashPos | null>(() => loadStoredPos(storageKey));
@@ -112,6 +121,7 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
   const role = useCanvasStore((s) => s.role);
   const readOnly = role !== null && !canEdit(role);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { screenToFlowPosition } = useReactFlow();
   // 캔버스 컨테이너(offsetParent) 크기 — 렌더링 시점의 클램프·기본 위치 계산에만 쓰고,
   // pos(사용자가 드래그로 정한 값)는 이 값 때문에 절대 갱신하지 않는다.
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -216,6 +226,48 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
     localStorage.removeItem(storageKey);
   };
 
+  const hasContent = (markdown: string) => markdown.trim().length > 0;
+  const visibleNodes = trashedNodes.filter((n) => {
+    if (contentFilter === "has") return hasContent(n.data.markdown);
+    if (contentFilter === "empty") return !hasContent(n.data.markdown);
+    return true;
+  });
+
+  const toggleSelectMode = () => {
+    setSelectMode((v) => !v);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const allSelected = visibleNodes.length > 0 && visibleNodes.every((n) => prev.has(n.id));
+      if (allSelected) return new Set();
+      return new Set(visibleNodes.map((n) => n.id));
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (
+      !window.confirm(
+        `선택한 ${selectedIds.size}개 노드를 영구삭제하시겠습니까? 되돌릴 수 없습니다.`,
+      )
+    ) {
+      return;
+    }
+    selectedIds.forEach((id) => applyLocalPermanentDeleteNode(id));
+    setSelectedIds(new Set());
+  };
+
   return (
     <div
       ref={(node) => {
@@ -238,55 +290,141 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
             openUpward ? "bottom-full mb-2" : "top-full mt-2"
           } ${anchorRight ? "right-0" : "left-0"}`}
         >
-          <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted">
-            임시 저장소 · {trashedNodes.length}
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">
+              임시 저장소 · {trashedNodes.length}
+            </p>
+            {!readOnly && trashedNodes.length > 0 && (
+              <button
+                type="button"
+                onClick={toggleSelectMode}
+                className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${
+                  selectMode ? "bg-brand/10 text-brand" : "text-muted hover:bg-canvas"
+                }`}
+              >
+                {selectMode ? "완료" : "선택"}
+              </button>
+            )}
+          </div>
+
+          {trashedNodes.length > 0 && (
+            <div className="mb-2 flex items-center gap-1 px-1">
+              {(
+                [
+                  { key: "all", label: "전체" },
+                  { key: "has", label: "내용 있음" },
+                  { key: "empty", label: "내용 없음" },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setContentFilter(f.key)}
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    contentFilter === f.key ? "bg-brand text-white" : "bg-canvas text-muted hover:bg-line"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectMode && visibleNodes.length > 0 && (
+            <div className="mb-2 flex items-center justify-between px-1">
+              <button
+                type="button"
+                onClick={toggleSelectAllVisible}
+                className="text-xs font-medium text-brand hover:underline"
+              >
+                {visibleNodes.every((n) => selectedIds.has(n.id)) ? "전체 해제" : "전체 선택"}
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+                className="rounded-md bg-error-bg px-2 py-0.5 text-xs font-medium text-error disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                선택 삭제 ({selectedIds.size})
+              </button>
+            </div>
+          )}
+
           {trashedNodes.length === 0 ? (
             <p className="px-1 py-4 text-center text-xs text-muted">비어 있습니다.</p>
+          ) : visibleNodes.length === 0 ? (
+            <p className="px-1 py-4 text-center text-xs text-muted">해당 조건의 항목이 없습니다.</p>
           ) : (
             <ul className="max-h-56 space-y-1 overflow-y-auto">
-              {trashedNodes.map((node) => {
+              {visibleNodes.map((node) => {
                 const isExpanded = expandedId === node.id;
                 return (
                   <li key={node.id} className="rounded-lg hover:bg-canvas">
                     <div
                       role="button"
                       tabIndex={0}
-                      onClick={() => setExpandedId(isExpanded ? null : node.id)}
+                      onClick={() =>
+                        selectMode ? toggleSelected(node.id) : setExpandedId(isExpanded ? null : node.id)
+                      }
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") setExpandedId(isExpanded ? null : node.id);
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        if (selectMode) toggleSelected(node.id);
+                        else setExpandedId(isExpanded ? null : node.id);
                       }}
                       className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm"
                     >
+                      {selectMode && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(node.id)}
+                          onChange={() => toggleSelected(node.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="shrink-0"
+                        />
+                      )}
                       <span className={`h-2 w-2 shrink-0 rounded-full ${TYPE_DOT[node.data.type]}`} />
                       <span className="flex-1 truncate text-ink">{node.data.title || "제목 없음"}</span>
-                      <button
-                        type="button"
-                        disabled={readOnly}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          applyLocalRestoreNode(node.id);
-                        }}
-                        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                      >
-                        복원
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="영구삭제"
-                        disabled={readOnly}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`"${node.data.title || "제목 없음"}" 노드를 영구삭제하시겠습니까? 되돌릴 수 없습니다.`)) {
-                            applyLocalPermanentDeleteNode(node.id);
-                          }
-                        }}
-                        className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted hover:bg-error-bg hover:text-error disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                      >
-                        ✕
-                      </button>
+                      {!selectMode && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={readOnly}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // 캔버스 컨테이너(offsetParent) 좌상단 근처를 화면 좌표계로 잡아
+                              // flow 좌표로 변환 — "화면에 보이는 자리부터 순서대로" 복원되게 한다.
+                              const parent = containerRef.current?.offsetParent as HTMLElement | null;
+                              const rect = parent?.getBoundingClientRect();
+                              const origin = rect
+                                ? screenToFlowPosition({
+                                    x: rect.left + RESTORE_ORIGIN_MARGIN,
+                                    y: rect.top + RESTORE_ORIGIN_MARGIN,
+                                  })
+                                : undefined;
+                              applyLocalRestoreNode(node.id, origin);
+                            }}
+                            className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                          >
+                            복원
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="영구삭제"
+                            disabled={readOnly}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`"${node.data.title || "제목 없음"}" 노드를 영구삭제하시겠습니까? 되돌릴 수 없습니다.`)) {
+                                applyLocalPermanentDeleteNode(node.id);
+                              }
+                            }}
+                            className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted hover:bg-error-bg hover:text-error disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                          >
+                            ✕
+                          </button>
+                        </>
+                      )}
                     </div>
-                    {isExpanded && (
+                    {isExpanded && !selectMode && (
                       <div
                         className="mx-2 mb-2 max-h-40 overflow-y-auto rounded-lg border border-line bg-canvas p-2 text-xs text-secondary [&_pre]:bg-code-bg [&_pre]:text-code-fg"
                         data-color-mode="light"
