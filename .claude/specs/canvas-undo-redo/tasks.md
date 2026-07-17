@@ -20,7 +20,8 @@ created: 2026-07-16
   - 완료 조건: `./scripts/check` 통과. 두 액션이 emit+scheduleSave 경로를 타는 것 diff 확인.
   - 조율: **F1 도메인 파일(canvasStore) 수정** — F1 위임 합의 범위 내(undo/redo가 F1 기능).
 
-- [ ] **T3. 캔버스 연산 recorder 배선 (생성·삭제·이동·엣지)**
+- [x] **T3. 캔버스 연산 recorder 배선 (생성·삭제·이동·엣지)**
+  - 알려진 동작: 휴지통 드래그-드롭 삭제는 [이동, 삭제] 2 step으로 기록됨(XYDrag가 위치 커밋 후 DragStop을 호출하는 순서 때문). undo 2회면 원위치까지 완전 복구되므로 의도적으로 수용 — 이동 기록을 억제하면 원위치 복귀 경로가 사라진다.
   - 내용: 내 동작만 기록(R3.1) — ① 노드 생성: `applyLocalAddNode` 호출부에서 record(undo=applyLocalDeleteNode, redo=applyLocalRestoreNode) ② 노드 삭제: `applyLocalDeleteNode` 직전 연결 엣지 목록 캡처, record(undo=restore+엣지들 applyLocalAddEdgeWithId, redo=delete) ③ 이동: React Flow `onNodeDragStart`에서 시작 좌표 캡처, `onNodesChange` 드래그 커밋 시 record(undo/redo=applyLocalMoveNode) — 위치 불변 드래그는 기록 생략 ④ 엣지 연결: `onConnect` 경유 record(undo=applyLocalDeleteEdge, redo=applyLocalAddEdgeWithId) ⑤ 엣지 해제: `applyLocalDeleteEdge` 호출부(DeletableEdge·onEdgesChange)에서 대상 엣지 캡처 후 record. `applyRemote*` 경로에는 어떤 기록도 넣지 않음(R3.2/R4.2). undo/redo 실행 중 재기록 방지 가드(플래그) 포함.
   - 요구사항: R2.1~R2.5, R2.7, R3.1, R3.2, R4.1, R4.2
   - 완료 조건: `./scripts/check` 통과 + 2탭 수동 시나리오(생성→undo→redo, 삭제→undo 시 엣지 복원, 이동→undo, 엣지 연결/해제→undo)가 로컬·상대 화면 모두 정합. 원격 수신이 스택에 안 쌓임.

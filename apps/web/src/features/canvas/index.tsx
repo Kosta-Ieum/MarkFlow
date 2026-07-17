@@ -16,7 +16,7 @@ import type { Node as FlowNode, OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { canEdit } from "../../lib/permissions";
-import { CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
+import { beginNodeDrag, CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
 import { useAuthStore } from "../../store/authStore";
 import { usePresenceStore } from "../../store/presenceStore";
 import { CursorOverlay } from "./CursorOverlay";
@@ -143,6 +143,7 @@ function CanvasSurface({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStart={(_, _node, dragged) => beginNodeDrag(dragged)}
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}

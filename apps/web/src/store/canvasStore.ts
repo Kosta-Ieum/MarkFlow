@@ -18,6 +18,7 @@ import {
 } from "../lib/canvasApi";
 import type { CollabAPI } from "../collab/CollabAPI";
 import { useAuthStore } from "./authStore";
+import { useHistoryStore } from "./historyStore";
 import { usePresenceStore } from "./presenceStore";
 
 /** 소프트 락: 다른 사용자가 md 편집 중인 노드인지 — 이동·삭제 차단에 공용으로 쓴다. */
@@ -43,6 +44,14 @@ export function setActiveCollab(collab: CollabAPI | null): void {
 /** 소프트 락 획득/해제 — 카드 컴포넌트(MarkdownNodeCard)가 편집 진입/이탈 시 호출. */
 export function requestNodeLock(nodeId: string | null): void {
   activeCollab?.emitLock(nodeId);
+}
+
+// 노드 이동 undo/redo(R2.3, R2.7): 드래그 1회 = 1 step. onNodeDragStart에서 함께 끌리는
+// 노드들의 시작 좌표를 잡아두고, onNodesChange 커밋 시점에 현재 좌표와 비교해 record 1회.
+// 멀티선택 드래그도 한 맵에 담겨 1 step으로 묶인다.
+let dragStartPositions: Map<string, XYPosition> | null = null;
+export function beginNodeDrag(nodes: { id: string; position: XYPosition }[]): void {
+  dragStartPositions = new Map(nodes.map((n) => [n.id, { ...n.position }]));
 }
 
 /** 커서 위치 emit — CanvasSurface의 pointermove에서 호출(throttle은 collab 구현체 내부). */
@@ -278,11 +287,37 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       (c): c is FlowNodeChange & { type: "position"; id: string; dragging: false } =>
         c.type === "position" && c.dragging === false,
     );
-    if (committed.length === 0 || !activeCollab) return;
+    if (committed.length === 0) return;
     const nodesById = new Map(get().nodes.map((n) => [n.id, n]));
-    for (const c of committed) {
-      const node = nodesById.get(c.id);
-      if (node) activeCollab.emitNode({ type: "update", node: { id: node.id, position: node.position } });
+    if (activeCollab) {
+      for (const c of committed) {
+        const node = nodesById.get(c.id);
+        if (node) activeCollab.emitNode({ type: "update", node: { id: node.id, position: node.position } });
+      }
+    }
+
+    // undo/redo 기록 — 드래그 시작 좌표(beginNodeDrag) 대비 실제로 움직인 노드만 1 step으로.
+    // 위치가 전부 불변이면(클릭·제자리 드롭) 기록 생략. emit 연결 여부와 무관하게 로컬 스택에 쌓는다.
+    const starts = dragStartPositions;
+    if (starts) {
+      const moves: { id: string; from: XYPosition; to: XYPosition }[] = [];
+      for (const c of committed) {
+        const from = starts.get(c.id);
+        const node = nodesById.get(c.id);
+        if (!from || !node) continue;
+        if (from.x !== node.position.x || from.y !== node.position.y) {
+          moves.push({ id: c.id, from, to: { ...node.position } });
+        }
+      }
+      dragStartPositions = null;
+      if (moves.length > 0) {
+        useHistoryStore.getState().record({
+          label: "노드 이동",
+          undo: () => moves.forEach((m) => get().applyLocalMoveNode(m.id, m.from)),
+          redo: () => moves.forEach((m) => get().applyLocalMoveNode(m.id, m.to)),
+          nodeIds: moves.map((m) => m.id),
+        });
+      }
     }
   },
 
@@ -326,6 +361,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({ nodes: [...state.nodes, node] }));
     get().scheduleSave();
     activeCollab?.emitNode({ type: "add", node: toNodeDTO(node) });
+    useHistoryStore.getState().record({
+      label: "노드 생성",
+      undo: () => get().applyLocalDeleteNode(id),
+      redo: () => get().applyLocalRestoreNode(id),
+      nodeIds: [id],
+    });
     return id;
   },
 
@@ -358,20 +399,37 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // 소프트 락: 다른 사용자가 md 편집 중인 노드는 삭제 차단 — 휴지통 드래그·멀티선택 등
     // 호출 경로가 늘어나도 여기 한 곳만 지키면 전부 막힌다(UX 가드, 최종 방어는 서버).
     if (isLockedByOther(id)) return;
-    const { projectId } = get();
-    set((state) => {
-      const target = state.nodes.find((n) => n.id === id);
-      if (!target) return state;
-      return {
-        nodes: state.nodes.filter((n) => n.id !== id),
-        edges: state.edges.filter((e) => e.source !== id && e.target !== id),
-        trashedNodes: [...state.trashedNodes, target],
-      };
-    });
+    // set() 전에 get()으로 대상 존재를 확인한다 — 없으면 조기 return(record도 안 함).
+    // 연결 엣지는 삭제 트랜잭션 전에 캡처해 undo에서 재생성한다(§CV-08은 서버 복원 시 미복원).
+    const { projectId, nodes, edges } = get();
+    const target = nodes.find((n) => n.id === id);
+    if (!target) return;
+    const connectedEdges = edges.filter((e) => e.source === id || e.target === id);
+    set((state) => ({
+      nodes: state.nodes.filter((n) => n.id !== id),
+      edges: state.edges.filter((e) => e.source !== id && e.target !== id),
+      trashedNodes: [...state.trashedNodes, target],
+    }));
     // BE가 소프트삭제 처리 후 알아서 다른 클라이언트에 node:delete를 브로드캐스트한다 —
     // 여기서 또 emit하면 중복 브로드캐스트 + 서버가 이미 삭제된 노드를 다시 지우려다
     // 404가 나는 레이스 컨디션이 생긴다(소켓 emit 제거).
     if (projectId) fireAndForget(deleteNodeApi(projectId, id));
+    useHistoryStore.getState().record({
+      label: "노드 삭제",
+      undo: () => {
+        get().applyLocalRestoreNode(id);
+        // 재적용 시점에 상대 endpoint가 현재 nodes에 살아있는 엣지만 재생성 —
+        // 죽은 endpoint로의 dangling 엣지 생성을 막는다(복원 직후 id는 다시 살아있다).
+        const alive = new Set(get().nodes.map((n) => n.id));
+        for (const edge of connectedEdges) {
+          const other = edge.source === id ? edge.target : edge.source;
+          if (alive.has(other)) get().applyLocalAddEdgeWithId(edge);
+        }
+      },
+      redo: () => get().applyLocalDeleteNode(id),
+      nodeIds: [id],
+      edgeIds: connectedEdges.map((e) => e.id),
+    });
   },
 
   applyLocalRestoreNode: (id) => {
@@ -403,12 +461,30 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({ edges: [...state.edges, edge] }));
     get().scheduleSave();
     activeCollab?.emitEdge({ type: "add", edge });
+    useHistoryStore.getState().record({
+      label: "엣지 연결",
+      undo: () => get().applyLocalDeleteEdge(edge.id),
+      redo: () => get().applyLocalAddEdgeWithId(edge),
+      nodeIds: [source, target],
+      edgeIds: [edge.id],
+    });
   },
 
   applyLocalDeleteEdge: (id) => {
+    // 대상 엣지를 set() 전에 캡처 — undo에서 같은 id로 재연결한다. 없으면 기존 동작만.
+    const edge = get().edges.find((e) => e.id === id);
     set((state) => ({ edges: state.edges.filter((e) => e.id !== id) }));
     get().scheduleSave();
     activeCollab?.emitEdge({ type: "delete", edgeId: id });
+    if (edge) {
+      useHistoryStore.getState().record({
+        label: "엣지 해제",
+        undo: () => get().applyLocalAddEdgeWithId(edge),
+        redo: () => get().applyLocalDeleteEdge(edge.id),
+        nodeIds: [edge.source, edge.target],
+        edgeIds: [edge.id],
+      });
+    }
   },
 
   applyLocalAddEdgeWithId: (edge) => {
@@ -480,3 +556,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({ edges: state.edges.filter((e) => e.id !== id) }));
   },
 }));
+
+// historyStore validator 배선(R5.1/R5.2) — undo/redo 실행 직전 대상 유효성 검사.
+// nodeIds 각각: nodes ∪ trashedNodes에 없으면 "missing"(폐기), 살아있어도 타인 락이면 "locked"(유지).
+// edgeIds는 존재 검사하지 않는다 — 엣지 연산은 양방향 멱등(중복 add 가드·없는 id delete no-op)이고,
+// 실제 의존성은 endpoint 노드라 nodeIds 검사로 충분하다.
+useHistoryStore.getState().setValidator((cmd) => {
+  const { nodes, trashedNodes } = useCanvasStore.getState();
+  const alive = new Set([...nodes, ...trashedNodes].map((n) => n.id));
+  for (const nodeId of cmd.nodeIds ?? []) {
+    if (!alive.has(nodeId)) return { ok: false, reason: "missing" };
+    if (isLockedByOther(nodeId)) return { ok: false, reason: "locked" };
+  }
+  return { ok: true };
+});
