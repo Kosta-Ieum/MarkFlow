@@ -13,6 +13,7 @@ export class EdgeService {
     projectId: string,
     userId: string,
     dto: EdgeCreateRequest,
+    forceId?: string,
   ): Promise<EdgeDTO> {
     await assertPermission(this.prisma, projectId, userId, "EDITOR");
 
@@ -35,7 +36,7 @@ export class EdgeService {
 
     const edge = await this.prisma.$transaction(async (tx) => {
       const created = await tx.edge.create({
-        data: { projectId, sourceId: dto.source, targetId: dto.target },
+        data: { id: forceId || undefined, projectId, sourceId: dto.source, targetId: dto.target },
       });
       await tx.activityLog.create({
         data: {

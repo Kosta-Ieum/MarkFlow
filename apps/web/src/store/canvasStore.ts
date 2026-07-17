@@ -324,7 +324,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   onEdgesChange: (changes) => {
     // remove는 React Flow 기본 처리(Backspace 등)로 흘려보내지 않고 applyLocalDeleteEdge를
     // 거치게 한다 — 안 그러면 emit이 빠져 삭제가 남의 화면에 실시간 반영되지 않는다.
-    const removedIds = changes.filter((c) => c.type === "remove").map((c) => c.id);
+    const removedIds = changes
+      .filter((c): c is Extract<FlowEdgeChange, { type: "remove" }> => c.type === "remove")
+      .map((c) => c.id);
     const nonRemove = changes.filter((c) => c.type !== "remove");
     set((state) => ({ edges: applyEdgeChanges(nonRemove, state.edges) }));
     get().scheduleSave();

@@ -11,7 +11,8 @@ export interface ProjectEvent {
     | "ACTIVITY_ADDED"
     | "MEMBER_REMOVED"
     | "MEMBER_ROLE_CHANGED"
-    | "USER_LOGGED_OUT";
+    | "USER_LOGGED_OUT"
+    | "PROJECT_DELETED";
   payload?: any;
 }
 

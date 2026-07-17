@@ -122,7 +122,15 @@ export function useSocketCollab(projectId: string): CollabAPI {
       useChatStore.getState().applyRemoteMessage(message);
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", (reason) => {
+      console.log("🚨 소켓 끊김 원인:", reason); // 개발자 도구 콘솔 확인용
+
+      // 추가된 로직: 서버가 킥오프 시킨 경우 (권한 변경, 강퇴 등)
+      if (reason === "io server disconnect") {
+        alert("프로젝트 권한이 변경되어 새로고침합니다.");
+        window.location.reload(); 
+      }
+
       usePresenceStore.getState().clear();
     });
   };

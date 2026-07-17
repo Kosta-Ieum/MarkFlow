@@ -102,15 +102,15 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
           projectId: event.projectId,
           nodeId: event.payload.nodeId,
         });
-      } else if (event.type === "MEMBER_REMOVED" || event.type === "MEMBER_ROLE_CHANGED") {
+      } else if (event.type === "MEMBER_REMOVED" || event.type === "MEMBER_ROLE_CHANGED" || event.type === "PROJECT_DELETED") {
         // Find the user's socket and kick them / release their locks
         const sockets = await this.server.in(room).fetchSockets();
-        const targetUserId = event.payload.userId;
-
+        const targetUserId = event.payload?.userId;
 
         for (const s of sockets) {
-          if (s.data.userId === targetUserId) {
-            if (event.type === "MEMBER_REMOVED" || event.type === "MEMBER_ROLE_CHANGED") {
+          // PROJECT_DELETED는 방 안의 모든 유저를 킥, 나머지는 targetUserId와 일치할 때만 킥
+          if (event.type === "PROJECT_DELETED" || s.data.userId === targetUserId) {
+            if (event.type === "MEMBER_REMOVED" || event.type === "MEMBER_ROLE_CHANGED" || event.type === "PROJECT_DELETED") {
               // Release all locks held by this socket
               const { releasedLocks } = this.presenceService.removeSocketFromAll(s.id);
               for (const lock of releasedLocks) {
@@ -191,6 +191,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
   @UseGuards(WsJwtGuard)
   @SubscribeWithValidation(SOCKET_EVENTS.nodeUpdate)
   async handleNodeUpdate(@ConnectedSocket() socket: Socket, @MessageBody() body: any): Promise<AckResponse> {
+    console.log("2. 백엔드가 프론트에서 쏜 소켓 이벤트를 받음!", body);
     const { projectId, node } = body;
     const userId = socket.data.userId as string;
 
@@ -226,7 +227,7 @@ export class CanvasGateway implements OnGatewayInit, OnGatewayDisconnect, OnModu
 
     const dto: EdgeCreateRequest = { source: edge.source, target: edge.target };
 
-    const created = await this.edgeService.createEdge(projectId, userId, dto);
+    const created = await this.edgeService.createEdge(projectId, userId, dto, edge.id);
     socket.to(roomOf(projectId)).emit(SOCKET_EVENTS.edgeAdd, { projectId, edge: created });
     return { ok: true, data: { edge: created } };
   }
