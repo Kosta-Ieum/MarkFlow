@@ -8,6 +8,7 @@ import type { NodeType } from "@markflow/shared";
 import { canEdit } from "../../lib/permissions";
 import { requestNodeLock, useCanvasStore } from "../../store/canvasStore";
 import { useAuthStore } from "../../store/authStore";
+import { useHistoryStore } from "../../store/historyStore";
 import { usePresenceStore } from "../../store/presenceStore";
 import { ChatFab } from "../panel/ChatFab";
 import { useCanvasSnapshot, useNode, useSaveNode } from "./useNodeEditor";
@@ -156,22 +157,48 @@ export function NodeEditorPage() {
 
   // 서버 데이터 로드 시 초기화 (한 번만)
   const initialized = useRef(false);
+  // undo/redo 기록용 "직전 서버 반영값" — 에디터 진입 시 로드된 노드로 초기화, 저장
+  // 성공마다 갱신(R2.6). 이 값 대비 no-op이면 기록을 생략한다(R2.7).
+  const prevSavedRef = useRef<{ title: string; markdown: string } | null>(null);
   useEffect(() => {
     if (node && !initialized.current) {
       setTitle(node.title);
       setMarkdown(node.markdown);
       setType(node.type);
+      prevSavedRef.current = { title: node.title, markdown: node.markdown };
       initialized.current = true;
     }
   }, [node]);
 
-  // 저장 실행 함수
+  // 저장 실행 함수 — 수동 저장 버튼과 디바운스 자동저장이 모두 이 함수를 거친다(단일 지점).
   const handleSave = async () => {
     if (isReadOnly) return;
     setSaveStatus("saving");
     try {
-      await saveNode({ title, markdown, type });
+      const saved = await saveNode({ title, markdown, type });
       setSaveStatus("saved");
+
+      if (saved) {
+        const prev = prevSavedRef.current;
+        const next = { title: saved.title, markdown: saved.markdown };
+        if (prev && (prev.title !== next.title || prev.markdown !== next.markdown)) {
+          useHistoryStore.getState().record({
+            label: "내용 수정",
+            undo: () =>
+              useCanvasStore.getState().applyLocalUpdateNode(nodeId, {
+                title: prev.title,
+                markdown: prev.markdown,
+              }),
+            redo: () =>
+              useCanvasStore.getState().applyLocalUpdateNode(nodeId, {
+                title: next.title,
+                markdown: next.markdown,
+              }),
+            nodeIds: [nodeId],
+          });
+        }
+        prevSavedRef.current = next;
+      }
     } catch {
       setSaveStatus("error");
     }

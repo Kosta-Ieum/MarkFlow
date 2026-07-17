@@ -26,7 +26,7 @@ created: 2026-07-16
   - 요구사항: R2.1~R2.5, R2.7, R3.1, R3.2, R4.1, R4.2
   - 완료 조건: `./scripts/check` 통과 + 2탭 수동 시나리오(생성→undo→redo, 삭제→undo 시 엣지 복원, 이동→undo, 엣지 연결/해제→undo)가 로컬·상대 화면 모두 정합. 원격 수신이 스택에 안 쌓임.
 
-- [ ] **T4. 노드 에디터 저장 recorder (제목·내용)**
+- [x] **T4. 노드 에디터 저장 recorder (제목·내용)**
   - 내용: `node-editor` `handleSave` 성공 시(useSaveNode onSuccess 경로) 저장 전 `{title, markdown}`(직전 서버 반영값 기준) 캡처 → record(undo/redo=`applyLocalUpdateNode(id, {...})`; 에디터 밖 캔버스 복귀 후에도 동작). 연속 저장은 저장 1회=1 step(R2.7). no-op 저장(값 불변)은 기록 생략.
   - 요구사항: R2.6, R2.7
   - 완료 조건: `./scripts/check` 통과 + 수동: 내용 수정·저장→캔버스 복귀→undo 시 이전 내용으로 (상대 화면 동일), redo 재적용.
