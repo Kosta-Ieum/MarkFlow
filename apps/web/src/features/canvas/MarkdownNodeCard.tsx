@@ -2,7 +2,7 @@
 // 화면설계서 §4.4.2: 186px 라운드 카드, 타입 도트+라벨+제목+접기/펼치기.
 // 접힘: 제목 + 첫 비제목 라인 26자 truncate. 펼침: 마크다운 렌더 본문.
 // §4.4 소프트 락 명세: 타인이 편집 중이면 잠금 아이콘+"OO 편집 중" 배지, 본인은 진입 차단(읽기 전용).
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import type { MouseEvent } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
@@ -31,6 +31,48 @@ const TYPE_STYLES: Record<
   decision: { label: "DECISION", header: "bg-node-decision-bg", text: "text-node-decision-text", dot: "bg-node-decision-dot", ring: "ring-node-decision-dot/35" },
   data: { label: "DATA", header: "bg-node-data-bg", text: "text-node-data-text", dot: "bg-node-data-dot", ring: "ring-node-data-dot/35" },
 };
+
+// 펼친 본문 높이 상한(R2.1) — text-xs 기준 약 12~14줄. 실화면 보고 조정 가능(design §2).
+const EXPANDED_MAX_HEIGHT = 240;
+
+// 펼침 본문 렌더 — 라이트 테마 고정(R1.1) + 높이 상한 & 넘칠 때만 잘림 표시(R2.1/R2.2).
+// "넘쳤는지"는 렌더 후 실제 높이로만 알 수 있어, 내부 콘텐츠를 ResizeObserver로 관찰한다
+// (바깥 박스는 상한에서 크기가 멈추므로 바깥을 관찰하면 이미지 로드 등 늦은 성장을 놓친다).
+function ExpandedMarkdown({ markdown }: { markdown: string }) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [isClamped, setIsClamped] = useState(false);
+
+  useEffect(() => {
+    const outer = outerRef.current;
+    const inner = innerRef.current;
+    if (!outer || !inner) return;
+    const measure = () => setIsClamped(outer.scrollHeight > outer.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, [markdown]);
+
+  return (
+    <div
+      ref={outerRef}
+      // 에디터(node-editor)·휴지통(TrashPanel)과 동일 패턴 — OS 다크모드여도 카드처럼 라이트 렌더.
+      data-color-mode="light"
+      style={{ maxHeight: EXPANDED_MAX_HEIGHT }}
+      className="relative mt-1.5 overflow-hidden text-xs text-secondary [&_.wmde-markdown]:bg-transparent [&_pre]:overflow-x-auto [&_pre]:bg-code-bg [&_pre]:text-code-fg [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full"
+    >
+      <div ref={innerRef}>
+        <MDEditor.Markdown source={markdown || "*내용 없음*"} />
+      </div>
+      {isClamped && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-10 items-end justify-center bg-gradient-to-t from-surface to-transparent">
+          <span className="pb-0.5 text-sm leading-none text-muted">⋯</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // 첫 번째 비-제목 라인(미리보기용), 26자 truncate — §4.4.2
 function getPreviewLine(markdown: string): string {
@@ -114,10 +156,9 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
         {collapsed ? (
           <p className="mt-1 truncate font-mono text-xs text-muted">{getPreviewLine(markdown)}</p>
         ) : (
-          // 스크롤로 감춰지면 접힌 것과 다를 게 없다는 피드백 — 높이 제한 없이 전부 펼쳐 보여준다.
-          <div className="mt-1.5 text-xs text-secondary [&_pre]:bg-code-bg [&_pre]:text-code-fg">
-            <MDEditor.Markdown source={markdown || "*내용 없음*"} />
-          </div>
+          // 높이 상한 + 잘림 표시(spec node-card-preview-and-count R2) — 과거 "높이 제한 없이
+          // 전부"는 카드가 캔버스를 덮는 문제로 뒤집힘. 전체 열람은 더블클릭 → 에디터(R2.3).
+          <ExpandedMarkdown markdown={markdown} />
         )}
       </div>
 
