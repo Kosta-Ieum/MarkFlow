@@ -116,6 +116,41 @@ function CanvasSurface({
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
   // 휴지통 드롭 삭제의 복구 좌표 — 삭제 순간 좌표는 휴지통 앞이라, 드래그 시작 위치를 잡아둔다.
   const dragStartRef = useRef<Map<string, XYPosition>>(new Map());
+  // 드래그 중인 카드가 휴지통 목록 뒤로 가려지던 문제 — React Flow가 드래그 중인 노드에 주는
+  // z-index 상승(elevateNodesOnSelect)은 캔버스 자신의 팬·줌 변환(.react-flow__viewport의
+  // transform)이 만드는 스태킹 컨텍스트 안에 갇혀서, 그 컨텍스트 밖에 있는 휴지통과는 애초에
+  // 비교되지 않는다 — 그래서 노드 쪽 z-index를 아무리 올려도 안 먹혔다. 대신 캔버스 컨테이너
+  // 자체(.react-flow)를 드래그 중에만 휴지통보다 위로 올린다. className(Tailwind 유틸리티)
+  // 대신 인라인 style을 쓰는 이유: 라이브러리 자체 스타일시트(@xyflow/react/dist/style.css)의
+  // 로드 순서에 따라 같은 우선순위의 클래스가 뒤늦게 덮어써 무시되는 문제가 있었다 — 인라인
+  // style은 그 어떤 외부 스타일시트 규칙보다도 항상 우선한다.
+  const [isNodeDragging, setIsNodeDragging] = useState(false);
+
+  // Shift+드래그 마퀴 선택 — React Flow 기본은 매번 박스 안 노드로 선택을 "교체"한다.
+  // 멀리 있는 노드를 추가로 잡으려면 일일이 화면을 옮겨서 한 박스 안에 다 넣어야 해서
+  // 번거롭다는 피드백 — 새 박스를 그리기 직전의 선택 상태를 기억해뒀다가, 드래그가
+  // 끝나면 그 목록도 다시 선택 상태로 되돌려 "합집합"이 되게 한다.
+  //
+  // React Flow의 onSelectionStart는 실제로는 "드래그 임계값을 넘은 첫 pointermove"에서
+  // 호출되는데, 그 콜백이 불리기 *직전*에 내부적으로 이미 resetSelectedElements()를 먼저
+  // 실행해버린다 — 그래서 onSelectionStart 시점엔 항상 선택이 이미 비어 있어서(스냅샷이
+  // 늘 빈 Set), 이전 시도(onSelectionStart에서 스냅샷)가 전혀 동작하지 않았다. 그보다 더
+  // 이른 시점인 pointerdown의 캡처 단계(부모 div → 자식 pane 순서로 먼저 도착)에서 미리
+  // 스냅샷을 떠 둔다.
+  const preservedSelectionRef = useRef<Set<string> | null>(null);
+  const handlePointerDownCapture = () => {
+    preservedSelectionRef.current = new Set(
+      useCanvasStore.getState().nodes.filter((n) => n.selected).map((n) => n.id),
+    );
+  };
+  const handleSelectionEnd = () => {
+    const preserved = preservedSelectionRef.current;
+    preservedSelectionRef.current = null;
+    if (!preserved || preserved.size === 0) return;
+    useCanvasStore.setState((state) => ({
+      nodes: state.nodes.map((n) => (preserved.has(n.id) && !n.selected ? { ...n, selected: true } : n)),
+    }));
+  };
 
   // §4.4.5 드래그 삭제 로직: 포인터가 휴지통 영역 위에서 mouseup → 휴지통 이동.
   // 휴지통 목록이 펼쳐져 있으면 그 목록 영역에 놓는 것도 인정한다(TrashPanel이 직접 판단).
@@ -142,6 +177,7 @@ function CanvasSurface({
       applyLocalDeleteNodes(targetIds, dragStartRef.current);
     }
     setIsDragOverTrash(false);
+    setIsNodeDragging(false);
   };
 
   // 멀티커서 렌더링(IEUM-35) 전이라도 emit 배선은 여기서 끝내둔다 — 커서 throttle(≈50ms)은
@@ -167,52 +203,69 @@ function CanvasSurface({
   }, []);
 
   return (
-    <div ref={surfaceRef} className="relative h-full flex-1">
+    <div ref={surfaceRef} className="relative h-full flex-1" onPointerDownCapture={handlePointerDownCapture}>
       {/* VIEWER는 편집 자체를 못 하니 저장 상태 표시가 의미 없다 — 뷰어에겐 아예 숨긴다. */}
       {!readOnly && (
         <div className="pointer-events-none absolute left-4 top-4 z-10 select-none rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
           {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
         </div>
       )}
-      <ReactFlow
-        nodes={renderNodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeDragStart={(_, _node, dragged) => {
-          dragStartRef.current = new Map(dragged.map((n) => [n.id, { ...n.position }]));
-          beginNodeDrag(dragged);
-        }}
-        onNodeDrag={handleNodeDrag}
-        onNodeDragStop={handleNodeDragStop}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        nodeExtent={CANVAS_NODE_EXTENT}
-        defaultEdgeOptions={defaultEdgeOptions}
-        defaultViewport={DEFAULT_VIEWPORT}
-        minZoom={MIN_ZOOM}
-        maxZoom={MAX_ZOOM}
-        panOnScroll
-        // 기본값은 Backspace+Delete 둘 다인데, 텍스트 편집 중 Backspace를 누르다 실수로
-        // 노드가 삭제되는 걸 막기 위해 Delete 키만 허용한다.
-        deleteKeyCode="Delete"
-        // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
-        nodesDraggable={!readOnly}
-        nodesConnectable={!readOnly}
-        // 빈 곳 클릭 시 선택 해제는 React Flow 기본 동작을 그대로 사용.
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#D9D5C9" />
-        {/* ZoomControls(bottom-6, 우측 하단 필)와 같은 모서리에 기본 배치돼 서로 겹치던 문제 —
-            미니맵을 그만큼 위로 띄워 자리를 분리한다. */}
-        <MiniMap
-          pannable
-          zoomable
-          className="!bg-surface !border !border-line"
-          style={{ marginBottom: 56 }}
-        />
-      </ReactFlow>
+      {/* ReactFlow 컴포넌트에 직접 style/className으로 z-index를 주는 시도는 라이브러리 내부
+          prop 병합 방식에 좌우돼 신뢰할 수 없었다 — 우리가 완전히 소유한 별도 wrapper div에
+          z-index를 주고 그 안에 ReactFlow를 넣어, 병합 로직과 무관하게 확실히 적용되게 한다. */}
+      <div className="absolute inset-0" style={isNodeDragging ? { zIndex: 20 } : undefined}>
+        <ReactFlow
+          nodes={renderNodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeDragStart={(_, _node, dragged) => {
+            dragStartRef.current = new Map(dragged.map((n) => [n.id, { ...n.position }]));
+            beginNodeDrag(dragged);
+            setIsNodeDragging(true);
+          }}
+          onNodeDrag={handleNodeDrag}
+          onNodeDragStop={handleNodeDragStop}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          nodeExtent={CANVAS_NODE_EXTENT}
+          // 노드가 갈 수 있는 한계(nodeExtent)보다 더 먼 빈 공간까지 패닝해서 보여줄 필요는
+          // 없다는 피드백 — 팬 가능 범위를 노드 한계와 동일하게 맞춘다.
+          translateExtent={CANVAS_NODE_EXTENT}
+          defaultEdgeOptions={defaultEdgeOptions}
+          defaultViewport={DEFAULT_VIEWPORT}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
+          // 핸들 정중앙에 정확히 놓아야만 연결선이 붙던 게 너무 빡빡하다는 피드백 —
+          // 기본 20px에서 넓혀 핸들 주변 적당한 범위에 놓아도 연결되게 한다.
+          connectionRadius={40}
+          panOnScroll
+          // 기본값은 Backspace+Delete 둘 다인데, 텍스트 편집 중 Backspace를 누르다 실수로
+          // 노드가 삭제되는 걸 막기 위해 Delete 키만 허용한다.
+          deleteKeyCode="Delete"
+          // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          // 기본값(Meta/Ctrl)이 아니라 Shift로 노드를 개별 클릭해도 기존 선택에 추가/해제되게 —
+          // 마퀴 선택(Shift+드래그)과 같은 키를 써서 "Shift를 누른 채로 드래그든 클릭이든 계속
+          // 선택이 누적"되는 느낌을 준다.
+          multiSelectionKeyCode="Shift"
+          onSelectionEnd={handleSelectionEnd}
+          // 빈 곳 클릭 시 선택 해제는 React Flow 기본 동작을 그대로 사용.
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="#D9D5C9" />
+          {/* ZoomControls(bottom-6, 우측 하단 필)와 같은 모서리에 기본 배치돼 서로 겹치던 문제 —
+              미니맵을 그만큼 위로 띄워 자리를 분리한다. */}
+          <MiniMap
+            pannable
+            zoomable
+            className="!bg-surface !border !border-line"
+            style={{ marginBottom: 56 }}
+          />
+        </ReactFlow>
+      </div>
       <CursorOverlay />
       <TrashPanel ref={trashRef} isDragOver={isDragOverTrash} />
       {/* CanvasSurface 자신이 이미 RightPanel과 flex 형제라 패널이 열리면 폭이 저절로
