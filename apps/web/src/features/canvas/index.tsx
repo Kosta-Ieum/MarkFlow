@@ -29,6 +29,7 @@ import { MarkdownNodeCard } from "./MarkdownNodeCard";
 import { RightPanel } from "./RightPanel";
 import { seedEdges, seedNodes } from "./seedNodes";
 import { TrashPanel } from "./TrashPanel";
+import type { TrashPanelHandle } from "./TrashPanel";
 import { ZoomControls } from "./ZoomControls";
 
 const nodeTypes = { markdown: MarkdownNodeCard };
@@ -38,10 +39,6 @@ const defaultEdgeOptions = {
   style: { stroke: "#B9B4A7", strokeWidth: 2, strokeDasharray: "6 6" },
   className: "animate-mfdash",
 };
-
-function isPointInRect(x: number, y: number, rect: DOMRect): boolean {
-  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-}
 
 // 새 노드 생성 위치 기준점 — 캔버스 컨테이너(화면에 보이는 영역) 좌상단에서 이만큼
 // 안쪽 지점부터 빈 자리를 찾는다(화면 밖에 생성되면 찾기 어렵다는 피드백 반영).
@@ -65,7 +62,29 @@ function CanvasSurface({
   // VIEWER는 캔버스를 팬·줌으로 "보기"만 — 노드 이동·연결·추가·삭제는 UI에서부터 막는다.
   // (프론트 비활성화는 UX 가드일 뿐, 최종 방어는 서버 — .claude/rules/frontend.md)
   const readOnly = role !== null && !canEdit(role);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
+
+  // 진입 시 defaultViewport(고정 좌표)가 노드 없는 빈 자리를 잡고 있던 문제 — 로드가 끝나면
+  // 실제 노드가 있는 쪽으로 화면을 맞춘다. 프로젝트당 한 번만(재드래그·재정렬마다 또
+  // 화면이 튀면 방해되므로), 그리고 그 프로젝트의 로딩 사이클을 실제로 관찰한 뒤에만 실행한다
+  // (마운트 시점엔 loadCanvas가 아직 시작 전이라 isLoading이 false·nodes가 빈 스냅샷일 수 있다).
+  const projectId = useCanvasStore((s) => s.projectId);
+  const fittedProjectRef = useRef<string | null>(null);
+  const observedLoadingProjectRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!projectId) return;
+    if (isLoading) {
+      observedLoadingProjectRef.current = projectId;
+      return;
+    }
+    if (fittedProjectRef.current === projectId) return;
+    if (observedLoadingProjectRef.current !== projectId) return;
+    fittedProjectRef.current = projectId;
+    if (nodes.length > 0) {
+      fitView({ duration: 300, maxZoom: 1 });
+    }
+  }, [projectId, isLoading, nodes.length, fitView]);
 
   // "+"로 노드를 추가할 때, 화면에 보이는 캔버스 영역 좌상단 근처부터 빈 자리를 찾도록
   // 좌표 계산 함수를 ref에 매 렌더 최신화해둔다(LeftSidebar 클릭 → CanvasPage가 호출).
@@ -93,10 +112,11 @@ function CanvasSurface({
     [nodes, locks, myId],
   );
 
-  const trashRef = useRef<HTMLDivElement>(null);
+  const trashRef = useRef<TrashPanelHandle>(null);
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
 
   // §4.4.5 드래그 삭제 로직: 포인터가 휴지통 영역 위에서 mouseup → 휴지통 이동.
+  // 휴지통 목록이 펼쳐져 있으면 그 목록 영역에 놓는 것도 인정한다(TrashPanel이 직접 판단).
   const getPointerPosition = (event: MouseEvent | TouchEvent): { x: number; y: number } | null => {
     if ("clientX" in event) return { x: event.clientX, y: event.clientY };
     const touch = event.touches[0] ?? event.changedTouches[0];
@@ -105,16 +125,14 @@ function CanvasSurface({
 
   const handleNodeDrag: OnNodeDrag<FlowNode> = (event) => {
     if (readOnly) return;
-    const rect = trashRef.current?.getBoundingClientRect();
     const point = getPointerPosition(event);
-    setIsDragOverTrash(!!rect && !!point && isPointInRect(point.x, point.y, rect));
+    setIsDragOverTrash(!!point && !!trashRef.current?.isPointOver(point.x, point.y));
   };
 
   const handleNodeDragStop: OnNodeDrag<FlowNode> = (event, node) => {
     if (readOnly) return;
-    const rect = trashRef.current?.getBoundingClientRect();
     const point = getPointerPosition(event);
-    if (rect && point && isPointInRect(point.x, point.y, rect)) {
+    if (point && trashRef.current?.isPointOver(point.x, point.y)) {
       // 멀티선택 중 여러 노드를 함께 드래그했을 때도 전부 휴지통행 — React Flow는
       // 드래그를 주도한 노드 하나만 콜백 인자로 넘겨주므로, 선택 목록에서 직접 찾는다.
       const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
@@ -150,7 +168,7 @@ function CanvasSurface({
     <div ref={surfaceRef} className="relative h-full flex-1">
       {/* VIEWER는 편집 자체를 못 하니 저장 상태 표시가 의미 없다 — 뷰어에겐 아예 숨긴다. */}
       {!readOnly && (
-        <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
+        <div className="pointer-events-none absolute left-4 top-4 z-10 select-none rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
           {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
         </div>
       )}
@@ -171,6 +189,9 @@ function CanvasSurface({
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         panOnScroll
+        // 기본값은 Backspace+Delete 둘 다인데, 텍스트 편집 중 Backspace를 누르다 실수로
+        // 노드가 삭제되는 걸 막기 위해 Delete 키만 허용한다.
+        deleteKeyCode="Delete"
         // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}

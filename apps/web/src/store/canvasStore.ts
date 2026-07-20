@@ -157,6 +157,8 @@ export interface MarkdownNodeData extends Record<string, unknown> {
   markdown: string;
   type: NodeType;
   collapsed: boolean;
+  /** 휴지통 정렬(최신순)용 — 살아있는 노드에는 없고, 소프트 삭제될 때만 채워진다. */
+  deletedAt?: string;
 }
 
 export type CanvasNode = Node<MarkdownNodeData>;
@@ -249,7 +251,7 @@ export function fromTrashNodeDTO(dto: TrashNode): CanvasNode {
     id: dto.id,
     type: "markdown",
     position: dto.position ?? { x: 0, y: 0 },
-    data: { title: dto.title, markdown: dto.markdown ?? "", type: dto.type, collapsed: true },
+    data: { title: dto.title, markdown: dto.markdown ?? "", type: dto.type, collapsed: true, deletedAt: dto.deletedAt },
   };
 }
 
@@ -320,11 +322,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // 소프트 락: 다른 사용자가 md 편집 중인 노드는 이동도 막는다 — 멀티선택으로 함께 끌려온
     // 경우(React Flow가 선택된 노드를 draggable 여부와 무관하게 같이 옮기는 케이스)까지
     // 막으려면 position 변경 자체를 여기서 걸러야 한다(개별 노드 draggable=false만으론 부족).
+    // remove(Delete/Backspace 키 기본 동작)는 React Flow가 하드 삭제로 바로 적용하게 두지
+    // 않고, applyLocalDeleteNode(휴지통 소프트 삭제 + 락 체크 + 실시간 브로드캐스트)를
+    // 거치도록 아래에서 따로 처리한다.
+    const removedIds = changes.filter((c) => c.type === "remove").map((c) => c.id);
     const nonRemove = changes.filter(
       (c) => c.type !== "remove" && !(c.type === "position" && isLockedByOther(c.id)),
     );
     set((state) => ({ nodes: applyNodeChanges(nonRemove, state.nodes) as CanvasNode[] }));
     get().scheduleSave();
+    removedIds.forEach((id) => get().applyLocalDeleteNode(id));
 
     // 드래그 완료(커밋) 시점의 최종 위치만 실시간 전파 — 매 프레임 emit하면
     // 네트워크가 막히고 드롭 후 잔상이 생긴다(과거 프로토타입에서 겪은 문제).
@@ -461,10 +468,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const target = nodes.find((n) => n.id === id);
     if (!target) return;
     const connectedEdges = edges.filter((e) => e.source === id || e.target === id);
+    // 휴지통 최신순 정렬용 타임스탬프 — 서버 왕복 전 낙관적 값(서버 deletedAt과 초 단위로 어긋나도
+    // 정렬 목적엔 문제없다).
+    const trashedTarget: CanvasNode = { ...target, data: { ...target.data, deletedAt: new Date().toISOString() } };
     set((state) => ({
       nodes: state.nodes.filter((n) => n.id !== id),
       edges: state.edges.filter((e) => e.source !== id && e.target !== id),
-      trashedNodes: [...state.trashedNodes, target],
+      trashedNodes: [...state.trashedNodes, trashedTarget],
     }));
     // BE가 소프트삭제 처리 후 알아서 다른 클라이언트에 node:delete를 브로드캐스트한다 —
     // 여기서 또 emit하면 중복 브로드캐스트 + 서버가 이미 삭제된 노드를 다시 지우려다
@@ -498,7 +508,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // (호출자가 화면 기준 위치를 못 구했을 때) 그 좌표를 그대로 쓴다. origin이 있으면
     // "화면에 보이는 자리에서 순서대로, 안 겹치게" 요구사항대로 새로 자리를 잡는다.
     const position = origin ? findFreePosition(resolveOrigin(origin), nodes) : target.position;
-    const node: CanvasNode = { ...target, position };
+    const { deletedAt: _deletedAt, ...restoredData } = target.data;
+    const node: CanvasNode = { ...target, position, data: restoredData };
     set((state) => ({
       trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
       nodes: [...state.nodes, node],
@@ -614,10 +625,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => {
       const target = state.nodes.find((n) => n.id === id);
       if (target) {
+        const trashedTarget: CanvasNode = {
+          ...target,
+          data: { ...target.data, deletedAt: new Date().toISOString() },
+        };
         return {
           nodes: state.nodes.filter((n) => n.id !== id),
           edges: state.edges.filter((e) => e.source !== id && e.target !== id),
-          trashedNodes: [...state.trashedNodes, target],
+          trashedNodes: [...state.trashedNodes, trashedTarget],
         };
       }
       return { trashedNodes: state.trashedNodes.filter((n) => n.id !== id) };
