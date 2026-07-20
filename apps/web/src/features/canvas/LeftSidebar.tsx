@@ -38,7 +38,7 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
   const readOnly = role !== null && !canEdit(role);
   const selectedNodeId = useCanvasStore((s) => s.nodes.find((n) => n.selected)?.id);
   const selectNode = useCanvasStore((s) => s.selectNode);
-  const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
+  const applyLocalDeleteNodes = useCanvasStore((s) => s.applyLocalDeleteNodes);
   const { fitView } = useReactFlow();
   // 일괄 삭제 — 휴지통과 동일 패턴(TrashPanel). 여러 노드를 하나씩 지우는 게 번거롭다는 피드백.
   const [selectMode, setSelectMode] = useState(false);
@@ -75,7 +75,7 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
     if (selectedIds.size === 0) return;
     // 소프트 삭제(휴지통 이동)라 되돌릴 수 있다 — 캔버스의 다른 삭제 경로(Del 키·드래그)와
     // 동일하게 확인창 없이 바로 처리해 일관성을 맞춘다.
-    selectedIds.forEach((id) => applyLocalDeleteNode(id));
+    applyLocalDeleteNodes([...selectedIds]);
     setSelectedIds(new Set());
   };
 
