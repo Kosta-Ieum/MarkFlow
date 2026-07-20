@@ -25,3 +25,14 @@
     background-color: #c4bfb1;
   }
 }
+
+/* @uiw/react-md-editor: 기본적으로 textarea 실제 높이가 내용 길이에 맞춰지고 나머지
+   빈 공간은 배경만 보이는 껍데기라, 내용이 짧을 때 그 빈 공간을 클릭하면 커서가 안
+   잡히는 문제가 있었다. 편집 영역 전체가 실제로 클릭 가능하도록 항상 꽉 채운다. */
+.w-md-editor-area,
+.w-md-editor-text,
+.w-md-editor-text-input,
+.w-md-editor-text-pre {
+  height: 100% !important;
+  min-height: 100% !important;
+}
