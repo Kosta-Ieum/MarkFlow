@@ -120,7 +120,10 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
       // nopan: React Flow는 draggable=false인 노드에는 이 클래스를 안 붙여서, 카드 위 클릭이
       // 캔버스 배경 팬(이동) 제스처로 흡수돼 더블클릭이 씹힌다(VIEWER=읽기전용에서 실제로 겪은 버그).
       // draggable=true일 땐 RF가 어차피 자동으로 붙이는 클래스라 중복 추가해도 무해하다.
-      className={`nopan relative w-[186px] rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
+      // select-none: Ctrl(⌘)+드래그로 여러 노드를 마퀴 선택할 때 카드 안 텍스트(제목·미리보기)가
+      // 브라우저 텍스트 선택으로 같이 잡혀 파랗게 강조되던 문제 — 카드는 클릭/더블클릭으로만
+      // 상호작용하지 텍스트를 직접 드래그해 복사할 일이 없어 선택 자체를 막는다.
+      className={`nopan relative w-[186px] select-none rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
         selected ? `ring-[3px] ${style.ring}` : ""
       } ${lockedByOther ? "opacity-80" : ""}`}
       onDoubleClick={handleEnterEdit}

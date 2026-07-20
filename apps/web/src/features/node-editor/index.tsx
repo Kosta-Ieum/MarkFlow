@@ -320,7 +320,14 @@ export function NodeEditorPage() {
             className={`rounded-md border px-2 py-0.5 font-mono text-xs ${meta.bgClass} ${meta.borderClass} ${meta.textClass} disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {NODE_TYPE_OPTIONS.map((t) => (
-              <option key={t} value={t}>
+              // 옵션 각각에도 타입별 배경/글자색을 넣어, 드롭다운을 펼쳤을 때 목록에서부터
+              // 색으로 구분되게 한다(전에는 선택된 값의 <select> 자체에만 색이 있어서
+              // 펼치면 목록이 전부 무채색으로 보였다).
+              <option
+                key={t}
+                value={t}
+                className={`${NODE_TYPE_META[t].bgClass} ${NODE_TYPE_META[t].textClass}`}
+              >
                 {NODE_TYPE_META[t].label}
               </option>
             ))}
