@@ -115,6 +115,32 @@ function CanvasSurface({
   const trashRef = useRef<TrashPanelHandle>(null);
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
 
+  // Shift+드래그 마퀴 선택 — React Flow 기본은 매번 박스 안 노드로 선택을 "교체"한다.
+  // 멀리 있는 노드를 추가로 잡으려면 일일이 화면을 옮겨서 한 박스 안에 다 넣어야 해서
+  // 번거롭다는 피드백 — 새 박스를 그리기 직전의 선택 상태를 기억해뒀다가, 드래그가
+  // 끝나면 그 목록도 다시 선택 상태로 되돌려 "합집합"이 되게 한다.
+  //
+  // React Flow의 onSelectionStart는 실제로는 "드래그 임계값을 넘은 첫 pointermove"에서
+  // 호출되는데, 그 콜백이 불리기 *직전*에 내부적으로 이미 resetSelectedElements()를 먼저
+  // 실행해버린다 — 그래서 onSelectionStart 시점엔 항상 선택이 이미 비어 있어서(스냅샷이
+  // 늘 빈 Set), 이전 시도(onSelectionStart에서 스냅샷)가 전혀 동작하지 않았다. 그보다 더
+  // 이른 시점인 pointerdown의 캡처 단계(부모 div → 자식 pane 순서로 먼저 도착)에서 미리
+  // 스냅샷을 떠 둔다.
+  const preservedSelectionRef = useRef<Set<string> | null>(null);
+  const handlePointerDownCapture = () => {
+    preservedSelectionRef.current = new Set(
+      useCanvasStore.getState().nodes.filter((n) => n.selected).map((n) => n.id),
+    );
+  };
+  const handleSelectionEnd = () => {
+    const preserved = preservedSelectionRef.current;
+    preservedSelectionRef.current = null;
+    if (!preserved || preserved.size === 0) return;
+    useCanvasStore.setState((state) => ({
+      nodes: state.nodes.map((n) => (preserved.has(n.id) && !n.selected ? { ...n, selected: true } : n)),
+    }));
+  };
+
   // §4.4.5 드래그 삭제 로직: 포인터가 휴지통 영역 위에서 mouseup → 휴지통 이동.
   // 휴지통 목록이 펼쳐져 있으면 그 목록 영역에 놓는 것도 인정한다(TrashPanel이 직접 판단).
   const getPointerPosition = (event: MouseEvent | TouchEvent): { x: number; y: number } | null => {
@@ -165,7 +191,7 @@ function CanvasSurface({
   }, []);
 
   return (
-    <div ref={surfaceRef} className="relative h-full flex-1">
+    <div ref={surfaceRef} className="relative h-full flex-1" onPointerDownCapture={handlePointerDownCapture}>
       {/* VIEWER는 편집 자체를 못 하니 저장 상태 표시가 의미 없다 — 뷰어에겐 아예 숨긴다. */}
       {!readOnly && (
         <div className="pointer-events-none absolute left-4 top-4 z-10 select-none rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
@@ -184,6 +210,9 @@ function CanvasSurface({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodeExtent={CANVAS_NODE_EXTENT}
+        // 노드가 갈 수 있는 한계(nodeExtent)보다 더 먼 빈 공간까지 패닝해서 보여줄 필요는
+        // 없다는 피드백 — 팬 가능 범위를 노드 한계와 동일하게 맞춘다.
+        translateExtent={CANVAS_NODE_EXTENT}
         defaultEdgeOptions={defaultEdgeOptions}
         defaultViewport={DEFAULT_VIEWPORT}
         minZoom={MIN_ZOOM}
@@ -195,6 +224,11 @@ function CanvasSurface({
         // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
+        // 기본값(Meta/Ctrl)이 아니라 Shift로 노드를 개별 클릭해도 기존 선택에 추가/해제되게 —
+        // 마퀴 선택(Shift+드래그)과 같은 키를 써서 "Shift를 누른 채로 드래그든 클릭이든 계속
+        // 선택이 누적"되는 느낌을 준다.
+        multiSelectionKeyCode="Shift"
+        onSelectionEnd={handleSelectionEnd}
         // 빈 곳 클릭 시 선택 해제는 React Flow 기본 동작을 그대로 사용.
         proOptions={{ hideAttribution: true }}
       >
