@@ -92,8 +92,10 @@ const AUTOSAVE_DEBOUNCE_MS = 2000; // .claude/rules/frontend.md: 저장 debounce
 // 기준으로 그리드 슬롯을 순서대로 훑어, 현재 캔버스에 있는 노드들과 실제로 안 겹치는 자리를
 // 찾는다(단순 순번 증가가 아니라 매번 현재 nodes 배열을 검사 — 사용자가 노드를 옮겨서
 // 그리드 슬롯 자리를 차지하고 있어도 정확히 피해간다).
-const NODE_WIDTH = 186;
-const NODE_HEIGHT_APPROX = 88;
+// 카드 실제 크기(MarkdownNodeCard: w-[186px], 접힘 상태 높이 ≈88px) — 그리드 배치뿐 아니라
+// ZoomControls의 "화면 안에 다 보이는지" 판정에도 같은 값을 써야 어긋나지 않는다.
+export const NODE_WIDTH = 186;
+export const NODE_HEIGHT_APPROX = 88;
 const GRID_GAP = 24;
 const GRID_STEP_X = NODE_WIDTH + GRID_GAP;
 const GRID_STEP_Y = NODE_HEIGHT_APPROX + GRID_GAP;
@@ -104,6 +106,20 @@ export const CANVAS_NODE_EXTENT: [[number, number], [number, number]] = [
   [-1000, -1000],
   [6000, 6000],
 ];
+
+// React Flow의 nodeExtent는 "렌더 시 화면에 보이는 위치"만 그 범위 안으로 밀어 넣고, 우리가
+// 저장하는 실제 node.position은 그대로 둔다 — 그래서 화면 기준으로 계산한 origin(예: 뷰포트를
+// 위로 많이 패닝/줌아웃한 상태)이 extent 밖(예: y<-1000)으로 나가면, 서로 다른 논리적 좌표를
+// 갖는 여러 카드가 화면에는 전부 같은 경계선에 눌려 그려져 겹쳐 보이고, translateExtent로
+// 패닝 범위까지 그 경계에 맞춰 놓은 뒤로는 그 경계에 눌린 카드가 화면 위쪽으로 잘려 보인다.
+// 그리드를 채울 공간(카드 크기만큼)을 감안해 origin 자체를 미리 extent 안쪽으로 당겨 둔다.
+function clampToCanvasExtent(pos: XYPosition): XYPosition {
+  const [[minX, minY], [maxX, maxY]] = CANVAS_NODE_EXTENT;
+  return {
+    x: Math.min(Math.max(pos.x, minX), maxX - NODE_WIDTH),
+    y: Math.min(Math.max(pos.y, minY), maxY - NODE_HEIGHT_APPROX),
+  };
+}
 
 function overlapsCard(a: XYPosition, b: XYPosition): boolean {
   return Math.abs(a.x - b.x) < GRID_STEP_X && Math.abs(a.y - b.y) < GRID_STEP_Y;
@@ -150,6 +166,37 @@ function findFreePosition(origin: XYPosition, existing: { position: XYPosition }
     if (!existing.some((n) => overlapsCard(candidate, n.position))) return candidate;
   }
   return origin;
+}
+
+// "노드 정렬" 전용 — 서로 멀리 떨어져 있는 노드 무리끼리는 섞지 않고 각자 제자리에서만
+// 그리드로 정리한다(전부를 한곳으로 모아버리면 일부러 나눠서 정리해둔 영역들이 뒤섞인다는
+// 피드백). 거리 기준 단순 연결(BFS)로 묶는다 — ZoomControls의 화면 맞춤 클러스터링과 같은
+// 발상이지만, 여긴 위치 재배치가 목적이라 store 쪽에 둔다.
+const ARRANGE_CLUSTER_DISTANCE = 800;
+function clusterByDistance<T extends { id: string; position: XYPosition }>(items: T[]): T[][] {
+  const clusters: T[][] = [];
+  const visited = new Set<string>();
+  for (const start of items) {
+    if (visited.has(start.id)) continue;
+    const cluster: T[] = [];
+    const queue = [start];
+    visited.add(start.id);
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      cluster.push(cur);
+      for (const other of items) {
+        if (visited.has(other.id)) continue;
+        const dx = other.position.x - cur.position.x;
+        const dy = other.position.y - cur.position.y;
+        if (Math.sqrt(dx * dx + dy * dy) <= ARRANGE_CLUSTER_DISTANCE) {
+          visited.add(other.id);
+          queue.push(other);
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
 }
 
 export interface MarkdownNodeData extends Record<string, unknown> {
@@ -202,6 +249,8 @@ interface CanvasState {
   /** origin을 주면(화면에 보이는 영역 기준) 그 근처의 안 겹치는 자리로 복원하고, 다른
    * 클라이언트에도 그 위치로 맞추도록 동기화한다. 생략하면 삭제 전 원래 좌표 그대로 복원. */
   applyLocalRestoreNode: (id: string, origin?: XYPosition) => void;
+  /** 뒤죽박죽인 노드들을 그리드로 한 번에 정리 — undo 1 step. */
+  applyLocalArrangeNodes: () => void;
   /** 영구삭제(물리 삭제) — §CV-16 */
   applyLocalPermanentDeleteNode: (id: string) => void;
   applyLocalAddEdge: (source: string, target: string) => void;
@@ -409,7 +458,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const node: CanvasNode = {
       id,
       type: "markdown",
-      position: findFreePosition(resolveOrigin(position), nodes),
+      position: findFreePosition(resolveOrigin(clampToCanvasExtent(position)), nodes),
       data: {
         title: `새 노드 ${nextDefaultNodeNumber([...nodes, ...trashedNodes])}`,
         markdown: "",
@@ -507,9 +556,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // BE의 restore()는 위치를 안 건드리고 삭제 전 좌표 그대로 돌려준다 — origin이 없으면
     // (호출자가 화면 기준 위치를 못 구했을 때) 그 좌표를 그대로 쓴다. origin이 있으면
     // "화면에 보이는 자리에서 순서대로, 안 겹치게" 요구사항대로 새로 자리를 잡는다.
-    const position = origin ? findFreePosition(resolveOrigin(origin), nodes) : target.position;
+    const position = origin
+      ? findFreePosition(resolveOrigin(clampToCanvasExtent(origin)), nodes)
+      : clampToCanvasExtent(target.position);
     const { deletedAt: _deletedAt, ...restoredData } = target.data;
-    const node: CanvasNode = { ...target, position, data: restoredData };
+    // 접힌 상태로 복원 — 삭제 당시 펼쳐져 있던 카드를 그대로 복원하면 실제 렌더 높이가
+    // 그리드 배치가 가정하는 높이(NODE_HEIGHT_APPROX)보다 훨씬 커져, 일괄 복원 시 아래
+    // 줄과 시각적으로 겹쳐 보이는 원인이 됐다. 항상 접힌 채로 시작해 높이를 예측 가능하게 한다.
+    const node: CanvasNode = { ...target, position, data: { ...restoredData, collapsed: true } };
     set((state) => ({
       trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
       nodes: [...state.nodes, node],
@@ -533,6 +587,60 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({ trashedNodes: state.trashedNodes.filter((n) => n.id !== id) }));
     // BE가 영구삭제 처리 후 알아서 다른 클라이언트에 브로드캐스트한다 — 중복 emit 제거.
     if (projectId) fireAndForget(purgeNodeApi(projectId, id).then(() => invalidateHistory(projectId)));
+  },
+
+  applyLocalArrangeNodes: () => {
+    // 타인이 편집 중(소프트 락)인 노드는 다른 삭제·이동 액션과 동일하게 건드리지 않고 그대로 둔다.
+    const movable = get().nodes.filter((n) => !isLockedByOther(n.id));
+    if (movable.length === 0) return;
+    // 일부러 멀리 떨어뜨려 나눠둔 영역들을 한곳으로 모아버리면 다 섞여버린다는 피드백 —
+    // 거리 기준으로 무리를 나눠서, 무리마다 "그 자리 근처"에서만 각자 그리드로 정리한다.
+    const clusters = clusterByDistance(movable);
+    const before = new Map<string, XYPosition>();
+    const after = new Map<string, XYPosition>();
+    for (const cluster of clusters) {
+      // 읽기 순서(위→아래, 왼→오른쪽)로 정렬해 정리 후에도 대략 비슷한 순서가 유지되게 한다.
+      const sorted = [...cluster].sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
+      // 기존 위치가 이미 extent 밖(과거 버그로 저장된 값 등)일 수 있으니 원점도 안쪽으로 당긴다.
+      const origin = clampToCanvasExtent({
+        x: Math.min(...sorted.map((n) => n.position.x)),
+        y: Math.min(...sorted.map((n) => n.position.y)),
+      });
+      sorted.forEach((n, i) => {
+        before.set(n.id, { ...n.position });
+        after.set(n.id, {
+          x: origin.x + (i % GRID_COLS) * GRID_STEP_X,
+          y: origin.y + Math.floor(i / GRID_COLS) * GRID_STEP_Y,
+        });
+      });
+    }
+    // 실제로 위치가 하나도 안 바뀌면(이미 정렬된 상태) history에 기록할 것도 없다.
+    const changed = movable.some((n) => {
+      const b = before.get(n.id)!;
+      const a = after.get(n.id)!;
+      return b.x !== a.x || b.y !== a.y;
+    });
+    if (!changed) return;
+
+    const applyPositions = (positions: Map<string, XYPosition>) => {
+      set((state) => ({
+        nodes: state.nodes.map((n) => (positions.has(n.id) ? { ...n, position: positions.get(n.id)! } : n)),
+      }));
+      get().scheduleSave();
+      if (activeCollab) {
+        for (const [id, position] of positions) {
+          activeCollab.emitNode({ type: "update", node: { id, position } });
+        }
+      }
+    };
+
+    applyPositions(after);
+    useHistoryStore.getState().record({
+      label: "노드 정렬",
+      undo: () => applyPositions(before),
+      redo: () => applyPositions(after),
+      nodeIds: movable.map((n) => n.id),
+    });
   },
 
   applyLocalAddEdge: (source, target) => {
