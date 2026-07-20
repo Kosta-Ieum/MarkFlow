@@ -57,7 +57,7 @@ function CanvasSurface({
   const isSaving = useCanvasStore((s) => s.isSaving);
   const saveError = useCanvasStore((s) => s.saveError);
   const isLoading = useCanvasStore((s) => s.isLoading);
-  const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
+  const applyLocalDeleteNodes = useCanvasStore((s) => s.applyLocalDeleteNodes);
   const role = useCanvasStore((s) => s.role);
   // VIEWER는 캔버스를 팬·줌으로 "보기"만 — 노드 이동·연결·추가·삭제는 UI에서부터 막는다.
   // (프론트 비활성화는 UX 가드일 뿐, 최종 방어는 서버 — .claude/rules/frontend.md)
@@ -114,6 +114,8 @@ function CanvasSurface({
 
   const trashRef = useRef<TrashPanelHandle>(null);
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
+  // 휴지통 드롭 삭제의 복구 좌표 — 삭제 순간 좌표는 휴지통 앞이라, 드래그 시작 위치를 잡아둔다.
+  const dragStartRef = useRef<Map<string, XYPosition>>(new Map());
   // 드래그 중인 카드가 휴지통 목록 뒤로 가려지던 문제 — React Flow가 드래그 중인 노드에 주는
   // z-index 상승(elevateNodesOnSelect)은 캔버스 자신의 팬·줌 변환(.react-flow__viewport의
   // transform)이 만드는 스태킹 컨텍스트 안에 갇혀서, 그 컨텍스트 밖에 있는 휴지통과는 애초에
@@ -172,7 +174,7 @@ function CanvasSurface({
       // 드래그를 주도한 노드 하나만 콜백 인자로 넘겨주므로, 선택 목록에서 직접 찾는다.
       const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
       const targetIds = selectedIds.length > 1 && selectedIds.includes(node.id) ? selectedIds : [node.id];
-      targetIds.forEach((id) => applyLocalDeleteNode(id));
+      applyLocalDeleteNodes(targetIds, dragStartRef.current);
     }
     setIsDragOverTrash(false);
     setIsNodeDragging(false);
@@ -219,6 +221,7 @@ function CanvasSurface({
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeDragStart={(_, _node, dragged) => {
+            dragStartRef.current = new Map(dragged.map((n) => [n.id, { ...n.position }]));
             beginNodeDrag(dragged);
             setIsNodeDragging(true);
           }}

@@ -246,6 +246,9 @@ interface CanvasState {
   applyLocalUpdateNode: (id: string, patch: Partial<Pick<MarkdownNodeData, "title" | "markdown" | "type">>) => void;
   applyLocalToggleCollapse: (id: string) => void;
   applyLocalDeleteNode: (id: string) => void;
+  /** 멀티선택 일괄 삭제 — 전체가 undo 1 step으로 기록된다. 단건 호출은 applyLocalDeleteNode와 동일.
+   * restorePositions: 휴지통 드래그처럼 삭제 순간 좌표가 원래 자리가 아닐 때, 복구될 좌표를 지정. */
+  applyLocalDeleteNodes: (ids: string[], restorePositions?: ReadonlyMap<string, XYPosition>) => void;
   /** origin을 주면(화면에 보이는 영역 기준) 그 근처의 안 겹치는 자리로 복원하고, 다른
    * 클라이언트에도 그 위치로 맞추도록 동기화한다. 생략하면 삭제 전 원래 좌표 그대로 복원. */
   applyLocalRestoreNode: (id: string, origin?: XYPosition) => void;
@@ -380,7 +383,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     );
     set((state) => ({ nodes: applyNodeChanges(nonRemove, state.nodes) as CanvasNode[] }));
     get().scheduleSave();
-    removedIds.forEach((id) => get().applyLocalDeleteNode(id));
+    get().applyLocalDeleteNodes(removedIds);
 
     // 드래그 완료(커밋) 시점의 최종 위치만 실시간 전파 — 매 프레임 emit하면
     // 네트워크가 막히고 드롭 후 잔상이 생긴다(과거 프로토타입에서 겪은 문제).
@@ -508,44 +511,69 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // 소프트 삭제 + 연결된 엣지 물리 삭제 (§CV-08 — 복구 시 엣지는 미복원 §CV-16)
   // DELETE /nodes/:id가 서버에서 엣지 정리까지 같이 하므로 bulk 저장(scheduleSave)은 안 탄다.
   applyLocalDeleteNode: (id) => {
-    // 소프트 락: 다른 사용자가 md 편집 중인 노드는 삭제 차단 — 휴지통 드래그·멀티선택 등
-    // 호출 경로가 늘어나도 여기 한 곳만 지키면 전부 막힌다(UX 가드, 최종 방어는 서버).
-    if (isLockedByOther(id)) return;
-    // set() 전에 get()으로 대상 존재를 확인한다 — 없으면 조기 return(record도 안 함).
-    // 연결 엣지는 삭제 트랜잭션 전에 캡처해 undo에서 재생성한다(§CV-08은 서버 복원 시 미복원).
-    const { projectId, nodes, edges } = get();
-    const target = nodes.find((n) => n.id === id);
-    if (!target) return;
-    const connectedEdges = edges.filter((e) => e.source === id || e.target === id);
-    // 휴지통 최신순 정렬용 타임스탬프 — 서버 왕복 전 낙관적 값(서버 deletedAt과 초 단위로 어긋나도
-    // 정렬 목적엔 문제없다).
-    const trashedTarget: CanvasNode = { ...target, data: { ...target.data, deletedAt: new Date().toISOString() } };
-    set((state) => ({
-      nodes: state.nodes.filter((n) => n.id !== id),
-      edges: state.edges.filter((e) => e.source !== id && e.target !== id),
-      trashedNodes: [...state.trashedNodes, trashedTarget],
-    }));
-    // BE가 소프트삭제 처리 후 알아서 다른 클라이언트에 node:delete를 브로드캐스트한다 —
-    // 여기서 또 emit하면 중복 브로드캐스트 + 서버가 이미 삭제된 노드를 다시 지우려다
-    // 404가 나는 레이스 컨디션이 생긴다(소켓 emit 제거).
-    if (projectId) {
-      fireAndForget(deleteNodeApi(projectId, id).then(() => invalidateHistory(projectId)));
+    get().applyLocalDeleteNodes([id]);
+  },
+
+  // 멀티선택 일괄 삭제 = undo 1 step — 노드별로 record하면 그룹 삭제를 undo할 때
+  // 한 번에 하나씩만 복구되는 문제가 있어, 실제 삭제분 전체를 커맨드 하나로 묶는다.
+  applyLocalDeleteNodes: (ids, restorePositions) => {
+    const deleted: { id: string; connectedEdges: Edge[] }[] = [];
+    for (const id of ids) {
+      // 소프트 락: 다른 사용자가 md 편집 중인 노드는 삭제 차단 — 휴지통 드래그·멀티선택 등
+      // 호출 경로가 늘어나도 여기 한 곳만 지키면 전부 막힌다(UX 가드, 최종 방어는 서버).
+      if (isLockedByOther(id)) continue;
+      // set() 전에 get()으로 대상 존재를 확인한다 — 없으면 스킵(record 대상에서도 제외).
+      // 연결 엣지는 삭제 트랜잭션 전에 캡처해 undo에서 재생성한다(§CV-08은 서버 복원 시 미복원).
+      const { projectId, nodes, edges } = get();
+      const target = nodes.find((n) => n.id === id);
+      if (!target) continue;
+      const connectedEdges = edges.filter((e) => e.source === id || e.target === id);
+      // 휴지통 최신순 정렬용 타임스탬프 — 서버 왕복 전 낙관적 값(서버 deletedAt과 초 단위로 어긋나도
+      // 정렬 목적엔 문제없다).
+      // 휴지통 드래그 삭제는 삭제 순간 좌표가 "휴지통 앞까지 끌려간 위치"다 — restorePositions가
+      // 있으면 그 좌표(드래그 시작 위치)로 저장해 undo·휴지통 복구 모두 원래 자리로 돌아가게 한다.
+      const restoreAt = restorePositions?.get(id);
+      const trashedTarget: CanvasNode = {
+        ...target,
+        ...(restoreAt ? { position: { ...restoreAt } } : {}),
+        data: { ...target.data, deletedAt: new Date().toISOString() },
+      };
+      set((state) => ({
+        nodes: state.nodes.filter((n) => n.id !== id),
+        edges: state.edges.filter((e) => e.source !== id && e.target !== id),
+        trashedNodes: [...state.trashedNodes, trashedTarget],
+      }));
+      // BE가 소프트삭제 처리 후 알아서 다른 클라이언트에 node:delete를 브로드캐스트한다 —
+      // 여기서 또 emit하면 중복 브로드캐스트 + 서버가 이미 삭제된 노드를 다시 지우려다
+      // 404가 나는 레이스 컨디션이 생긴다(소켓 emit 제거).
+      if (projectId) {
+        fireAndForget(deleteNodeApi(projectId, id).then(() => invalidateHistory(projectId)));
+      }
+      deleted.push({ id, connectedEdges });
     }
+    if (deleted.length === 0) return;
+
+    const deletedIds = deleted.map((d) => d.id);
+    // 삭제 노드 둘을 잇는 엣지는 양쪽 캡처에 중복으로 잡힌다 — id로 dedup.
+    const edgeById = new Map<string, Edge>();
+    for (const d of deleted) for (const e of d.connectedEdges) edgeById.set(e.id, e);
+    const capturedEdges = [...edgeById.values()];
+
     useHistoryStore.getState().record({
-      label: "노드 삭제",
+      label: deletedIds.length > 1 ? `노드 ${deletedIds.length}개 삭제` : "노드 삭제",
       undo: () => {
-        get().applyLocalRestoreNode(id);
-        // 재적용 시점에 상대 endpoint가 현재 nodes에 살아있는 엣지만 재생성 —
-        // 죽은 endpoint로의 dangling 엣지 생성을 막는다(복원 직후 id는 다시 살아있다).
+        deletedIds.forEach((id) => get().applyLocalRestoreNode(id));
+        // 전부 복원한 뒤 양쪽 endpoint가 살아있는 엣지만 재생성 — dangling 방지.
+        // (단건이던 기존 동작과 동일: 자기 자신은 방금 복원돼 항상 alive)
         const alive = new Set(get().nodes.map((n) => n.id));
-        for (const edge of connectedEdges) {
-          const other = edge.source === id ? edge.target : edge.source;
-          if (alive.has(other)) get().applyLocalAddEdgeWithId(edge);
+        for (const edge of capturedEdges) {
+          if (alive.has(edge.source) && alive.has(edge.target)) get().applyLocalAddEdgeWithId(edge);
         }
       },
-      redo: () => get().applyLocalDeleteNode(id),
-      nodeIds: [id],
-      edgeIds: connectedEdges.map((e) => e.id),
+      // 재귀 record는 historyStore의 isApplying 가드가 막는다.
+      redo: () => get().applyLocalDeleteNodes(deletedIds),
+      nodeIds: deletedIds,
+      edgeIds: capturedEdges.map((e) => e.id),
     });
   },
 
