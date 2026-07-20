@@ -18,7 +18,7 @@ created: 2026-07-20
   - 요구사항: R2.1, R2.2
   - 완료 조건: 새로고침 시 M 애니메이션 표시, 복원 완료 후 라우팅 기존과 동일(인증→원래 화면, 미인증→/login). `./scripts/check` 통과
 
-- [ ] **T3. 캔버스 로딩 오버레이**
+- [x] **T3. 캔버스 로딩 오버레이**
   - 내용: `features/canvas/index.tsx`에서 `canvasStore.isLoading` 구독, true 동안 surface 컨테이너에 `absolute inset-0` 반투명 오버레이 + 중앙 `<BrandLoader />` 렌더
   - 요구사항: R3.1–R3.3
   - 완료 조건: 캔버스 진입 시 오버레이 표시·로드 완료 시 제거, 오버레이 표시 중 노드 클릭/드래그 불가 확인. `./scripts/check` 통과

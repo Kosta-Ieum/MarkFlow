@@ -20,6 +20,7 @@ import { canEdit } from "../../lib/permissions";
 import { beginNodeDrag, CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
 import { useAuthStore } from "../../store/authStore";
 import { usePresenceStore } from "../../store/presenceStore";
+import { BrandLoader } from "../../components";
 import { CursorOverlay } from "./CursorOverlay";
 import { DeletableEdge } from "./DeletableEdge";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
@@ -58,6 +59,7 @@ function CanvasSurface({
   const onConnect = useCanvasStore((s) => s.onConnect);
   const isSaving = useCanvasStore((s) => s.isSaving);
   const saveError = useCanvasStore((s) => s.saveError);
+  const isLoading = useCanvasStore((s) => s.isLoading);
   const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
   const role = useCanvasStore((s) => s.role);
   // VIEWER는 캔버스를 팬·줌으로 "보기"만 — 노드 이동·연결·추가·삭제는 UI에서부터 막는다.
@@ -191,6 +193,12 @@ function CanvasSurface({
           줄어든다 — 여기서 또 offsetRight로 밀면 좁아진 영역 밖으로 나가 안 보이게 된다
           (이중 보정 버그). 우측 패널 폭 보정은 필요 없다. undo/redo 버튼은 pill 내부 인라인. */}
       <ZoomControls />
+      {/* 로딩 중 조작 차단은 이 오버레이가 포인터 이벤트를 삼키는 것으로 충분 — 별도 가드 없음. */}
+      {isLoading && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-app/70">
+          <BrandLoader />
+        </div>
+      )}
     </div>
   );
 }
