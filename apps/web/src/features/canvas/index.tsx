@@ -148,7 +148,7 @@ function CanvasSurface({
     <div ref={surfaceRef} className="relative h-full flex-1">
       {/* VIEWER는 편집 자체를 못 하니 저장 상태 표시가 의미 없다 — 뷰어에겐 아예 숨긴다. */}
       {!readOnly && (
-        <div className="absolute left-4 top-4 z-10 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
+        <div className="pointer-events-none absolute left-4 top-4 z-10 select-none rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted shadow-sm">
           {saveError ? <span className="text-error">저장 실패</span> : isSaving ? "저장 중…" : "저장됨"}
         </div>
       )}
@@ -169,6 +169,9 @@ function CanvasSurface({
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         panOnScroll
+        // 기본값은 Backspace+Delete 둘 다인데, 텍스트 편집 중 Backspace를 누르다 실수로
+        // 노드가 삭제되는 걸 막기 위해 Delete 키만 허용한다.
+        deleteKeyCode="Delete"
         // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
