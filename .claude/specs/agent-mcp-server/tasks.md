@@ -24,7 +24,7 @@ created: 2026-07-20
   - 요구사항: R1.1, R3.1~R3.4, R4.5(검증 골격), R6.4
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.
 
-- [ ] **T4. SocketManager + 단위 테스트**
+- [x] **T4. SocketManager + 단위 테스트**
   - 내용: `collab.ts` — socket.io-client 접속(`auth:{token}`·websocket), 프로젝트별 `sync:join` 1회(joined set, ack로 성공 확인), `emitWithAck`(5s 타임아웃, `{ok:false}`→에러 매핑), disconnect 시 joined 초기화 + 다음 호출 lazy 재접속(R5.3), AuthManager 재로그인 통지 수신 시 새 토큰 재접속(설계 제약 2 연쇄). AckResponse 로컬 타입(출처 주석). 단위 테스트(socket mock): join 멱등, ack 타임아웃, ok:false 매핑, 재접속 시 joined 리셋.
   - 요구사항: R5.1(기반), R5.2, R5.3
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.
