@@ -29,7 +29,7 @@ created: 2026-07-20
   - 요구사항: R5.1(기반), R5.2, R5.3
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.
 
-- [ ] **T5. 편집 툴 6개**
+- [x] **T5. 편집 툴 6개**
   - 내용: `tools/write.ts` — `create_node`(uuid 생성, 기본값: title "새 노드"·type idea·collapsed true, position 미지정 시 캔버스 조회 후 무겹침 그리드 슬롯 — FE findFreePosition 상수 동일 경량 사본)·`update_node`(부분 patch)·`connect_edge`(ack의 **서버 재발급 edge id** 반환)·`disconnect_edge`는 소켓 emit+ack, `delete_node`·`restore_node`는 REST(BE 브로드캐스트 경로). 락·권한 거부는 ack/REST 에러 그대로 전달(R5.4, R6.1). 단위 테스트: 입력 검증, 그리드 배치 계산, edge id가 ack 기준인 것.
   - 요구사항: R4.1~R4.5, R5.1, R5.4, R6.1, R6.2
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.

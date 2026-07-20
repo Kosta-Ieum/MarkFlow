@@ -6,6 +6,7 @@ import { AuthManager } from "./auth.js";
 import { SocketManager } from "./collab.js";
 import type { Env } from "./env.js";
 import { registerReadTools } from "./tools/read.js";
+import { registerWriteTools } from "./tools/write.js";
 
 function readVersion(): string {
   const packageJsonPath = new URL("../package.json", import.meta.url);
@@ -25,7 +26,7 @@ export function createMarkflowServer(env: Env): McpServer {
   collab = new SocketManager(env, auth);
 
   registerReadTools(server, api);
-  // T5: registerWriteTools(server, api, collab) — 편집 툴 6개를 여기 등록한다.
+  registerWriteTools(server, api, collab);
 
   return server;
 }
