@@ -19,7 +19,7 @@ created: 2026-07-20
   - 요구사항: R2.1~R2.4, R6.1~R6.3
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.
 
-- [ ] **T3. 읽기 툴 4개 + 툴 등록**
+- [x] **T3. 읽기 툴 4개 + 툴 등록**
   - 내용: `server.ts`(Server 생성·툴 등록 골격) + `tools/read.ts` — `list_projects`·`get_canvas`·`get_history`(limit·before)·`get_trash`. 입력 zod(shared 재사용) 검증, 결과는 JSON 텍스트. 툴 핸들러 공통 try/catch(R6.4). 단위 테스트: 입력 검증 거부 메시지, 정상 경로(REST mock).
   - 요구사항: R1.1, R3.1~R3.4, R4.5(검증 골격), R6.4
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.
