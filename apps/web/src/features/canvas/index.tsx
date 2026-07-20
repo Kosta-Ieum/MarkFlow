@@ -20,6 +20,7 @@ import { canEdit } from "../../lib/permissions";
 import { beginNodeDrag, CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
 import { useAuthStore } from "../../store/authStore";
 import { usePresenceStore } from "../../store/presenceStore";
+import { LoadingSplash } from "../../components";
 import { CursorOverlay } from "./CursorOverlay";
 import { DeletableEdge } from "./DeletableEdge";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
@@ -55,6 +56,7 @@ function CanvasSurface({
   const onConnect = useCanvasStore((s) => s.onConnect);
   const isSaving = useCanvasStore((s) => s.isSaving);
   const saveError = useCanvasStore((s) => s.saveError);
+  const isLoading = useCanvasStore((s) => s.isLoading);
   const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
   const role = useCanvasStore((s) => s.role);
   // VIEWER는 캔버스를 팬·줌으로 "보기"만 — 노드 이동·연결·추가·삭제는 UI에서부터 막는다.
@@ -67,7 +69,6 @@ function CanvasSurface({
   // 화면이 튀면 방해되므로), 그리고 그 프로젝트의 로딩 사이클을 실제로 관찰한 뒤에만 실행한다
   // (마운트 시점엔 loadCanvas가 아직 시작 전이라 isLoading이 false·nodes가 빈 스냅샷일 수 있다).
   const projectId = useCanvasStore((s) => s.projectId);
-  const isLoading = useCanvasStore((s) => s.isLoading);
   const fittedProjectRef = useRef<string | null>(null);
   const observedLoadingProjectRef = useRef<string | null>(null);
 
@@ -213,6 +214,8 @@ function CanvasSurface({
           줄어든다 — 여기서 또 offsetRight로 밀면 좁아진 영역 밖으로 나가 안 보이게 된다
           (이중 보정 버그). 우측 패널 폭 보정은 필요 없다. undo/redo 버튼은 pill 내부 인라인. */}
       <ZoomControls />
+      {/* 로딩 중 조작 차단은 스플래시가 포인터 이벤트를 삼키는 것으로 충분 — 별도 가드 없음. */}
+      {isLoading && <LoadingSplash />}
     </div>
   );
 }

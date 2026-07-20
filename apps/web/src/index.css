@@ -26,6 +26,156 @@
   }
 }
 
+@layer components {
+  /* 기본값 = 완성 상태(정적 M). 애니메이션이 이 값을 덮어쓰고, reduced-motion에서는 이 값이 그대로 남는다. */
+  .mf-loader-path {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 0;
+    animation: mf-loader-draw 2.2s linear infinite;
+  }
+
+  .mf-loader-node {
+    opacity: 1;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .mf-loader-node-1 {
+    animation: mf-loader-node-1 2.2s infinite;
+  }
+
+  .mf-loader-node-2 {
+    animation: mf-loader-node-2 2.2s infinite;
+  }
+
+  .mf-loader-node-3 {
+    animation: mf-loader-node-3 2.2s infinite;
+  }
+
+  .mf-loader-node-4 {
+    animation: mf-loader-node-4 2.2s infinite;
+  }
+
+  .mf-loader-node-5 {
+    animation: mf-loader-node-5 2.2s infinite;
+  }
+
+  .mf-loader {
+    animation: mf-loader-fade 2.2s infinite;
+  }
+
+  @keyframes mf-loader-draw {
+    0% {
+      stroke-dashoffset: 100;
+    }
+    60%,
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes mf-loader-fade {
+    0%,
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes mf-loader-node-1 {
+    0% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    1.5% {
+      opacity: 1;
+      transform: scale(1.15);
+    }
+    3%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes mf-loader-node-2 {
+    0%,
+    16% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    17.5% {
+      opacity: 1;
+      transform: scale(1.15);
+    }
+    19%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes mf-loader-node-3 {
+    0%,
+    30% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    31.5% {
+      opacity: 1;
+      transform: scale(1.15);
+    }
+    33%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes mf-loader-node-4 {
+    0%,
+    44% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    45.5% {
+      opacity: 1;
+      transform: scale(1.15);
+    }
+    47%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes mf-loader-node-5 {
+    0%,
+    60% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    61.5% {
+      opacity: 1;
+      transform: scale(1.15);
+    }
+    63%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mf-loader,
+    .mf-loader * {
+      animation: none;
+    }
+  }
+}
+
 /* @uiw/react-md-editor: 기본적으로 textarea 실제 높이가 내용 길이에 맞춰지고 나머지
    빈 공간은 배경만 보이는 껍데기라, 내용이 짧을 때 그 빈 공간을 클릭하면 커서가 안
    잡히는 문제가 있었다. 편집 영역 전체가 실제로 클릭 가능하도록 항상 꽉 채운다. */

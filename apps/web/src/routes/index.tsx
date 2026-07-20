@@ -2,7 +2,7 @@
 import type { ReactElement } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { AppShell } from "../components";
+import { AppShell, LoadingSplash } from "../components";
 import { AuthPage } from "../features/auth";
 import { CanvasPage } from "../features/canvas";
 import { ProjectCollabLayout } from "../features/canvas/ProjectCollabLayout";
@@ -18,15 +18,7 @@ interface ProtectedRouteProps {
 
 // 부팅 refresh 진행 중 공통 로딩.
 function BootLoading() {
-  return (
-    <div
-      className="flex min-h-[60vh] items-center justify-center text-muted"
-      role="status"
-      aria-live="polite"
-    >
-      불러오는 중…
-    </div>
-  );
+  return <LoadingSplash />;
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {

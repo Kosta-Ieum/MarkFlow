@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "../store/authStore";
+import { BrandMark } from "./BrandMark";
 
 const HEADER_BG = "rgba(246,245,241,.86)";
 
@@ -103,7 +104,7 @@ export function GlobalHeader() {
         className="flex items-center gap-2 font-display text-lg font-bold"
         aria-label="MarkFlow 홈"
       >
-        <span className="grid h-7 w-7 place-items-center rounded-[28%] bg-ink" aria-hidden />
+        <BrandMark size={28} />
         <span>
           <span className="text-ink">Mark</span>
           <span className="text-brand">flow</span>
