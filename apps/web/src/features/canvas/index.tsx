@@ -114,6 +114,8 @@ function CanvasSurface({
 
   const trashRef = useRef<TrashPanelHandle>(null);
   const [isDragOverTrash, setIsDragOverTrash] = useState(false);
+  // 휴지통 드롭 삭제의 복구 좌표 — 삭제 순간 좌표는 휴지통 앞이라, 드래그 시작 위치를 잡아둔다.
+  const dragStartRef = useRef<Map<string, XYPosition>>(new Map());
 
   // §4.4.5 드래그 삭제 로직: 포인터가 휴지통 영역 위에서 mouseup → 휴지통 이동.
   // 휴지통 목록이 펼쳐져 있으면 그 목록 영역에 놓는 것도 인정한다(TrashPanel이 직접 판단).
@@ -137,7 +139,7 @@ function CanvasSurface({
       // 드래그를 주도한 노드 하나만 콜백 인자로 넘겨주므로, 선택 목록에서 직접 찾는다.
       const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
       const targetIds = selectedIds.length > 1 && selectedIds.includes(node.id) ? selectedIds : [node.id];
-      applyLocalDeleteNodes(targetIds);
+      applyLocalDeleteNodes(targetIds, dragStartRef.current);
     }
     setIsDragOverTrash(false);
   };
@@ -178,7 +180,10 @@ function CanvasSurface({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onNodeDragStart={(_, _node, dragged) => beginNodeDrag(dragged)}
+        onNodeDragStart={(_, _node, dragged) => {
+          dragStartRef.current = new Map(dragged.map((n) => [n.id, { ...n.position }]));
+          beginNodeDrag(dragged);
+        }}
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}

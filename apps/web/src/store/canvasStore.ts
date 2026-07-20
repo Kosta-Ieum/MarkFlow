@@ -199,8 +199,9 @@ interface CanvasState {
   applyLocalUpdateNode: (id: string, patch: Partial<Pick<MarkdownNodeData, "title" | "markdown" | "type">>) => void;
   applyLocalToggleCollapse: (id: string) => void;
   applyLocalDeleteNode: (id: string) => void;
-  /** 멀티선택 일괄 삭제 — 전체가 undo 1 step으로 기록된다. 단건 호출은 applyLocalDeleteNode와 동일. */
-  applyLocalDeleteNodes: (ids: string[]) => void;
+  /** 멀티선택 일괄 삭제 — 전체가 undo 1 step으로 기록된다. 단건 호출은 applyLocalDeleteNode와 동일.
+   * restorePositions: 휴지통 드래그처럼 삭제 순간 좌표가 원래 자리가 아닐 때, 복구될 좌표를 지정. */
+  applyLocalDeleteNodes: (ids: string[], restorePositions?: ReadonlyMap<string, XYPosition>) => void;
   /** origin을 주면(화면에 보이는 영역 기준) 그 근처의 안 겹치는 자리로 복원하고, 다른
    * 클라이언트에도 그 위치로 맞추도록 동기화한다. 생략하면 삭제 전 원래 좌표 그대로 복원. */
   applyLocalRestoreNode: (id: string, origin?: XYPosition) => void;
@@ -466,7 +467,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   // 멀티선택 일괄 삭제 = undo 1 step — 노드별로 record하면 그룹 삭제를 undo할 때
   // 한 번에 하나씩만 복구되는 문제가 있어, 실제 삭제분 전체를 커맨드 하나로 묶는다.
-  applyLocalDeleteNodes: (ids) => {
+  applyLocalDeleteNodes: (ids, restorePositions) => {
     const deleted: { id: string; connectedEdges: Edge[] }[] = [];
     for (const id of ids) {
       // 소프트 락: 다른 사용자가 md 편집 중인 노드는 삭제 차단 — 휴지통 드래그·멀티선택 등
@@ -480,7 +481,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const connectedEdges = edges.filter((e) => e.source === id || e.target === id);
       // 휴지통 최신순 정렬용 타임스탬프 — 서버 왕복 전 낙관적 값(서버 deletedAt과 초 단위로 어긋나도
       // 정렬 목적엔 문제없다).
-      const trashedTarget: CanvasNode = { ...target, data: { ...target.data, deletedAt: new Date().toISOString() } };
+      // 휴지통 드래그 삭제는 삭제 순간 좌표가 "휴지통 앞까지 끌려간 위치"다 — restorePositions가
+      // 있으면 그 좌표(드래그 시작 위치)로 저장해 undo·휴지통 복구 모두 원래 자리로 돌아가게 한다.
+      const restoreAt = restorePositions?.get(id);
+      const trashedTarget: CanvasNode = {
+        ...target,
+        ...(restoreAt ? { position: { ...restoreAt } } : {}),
+        data: { ...target.data, deletedAt: new Date().toISOString() },
+      };
       set((state) => ({
         nodes: state.nodes.filter((n) => n.id !== id),
         edges: state.edges.filter((e) => e.source !== id && e.target !== id),

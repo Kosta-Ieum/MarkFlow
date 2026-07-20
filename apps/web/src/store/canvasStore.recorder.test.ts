@@ -123,6 +123,26 @@ describe("노드 그룹 삭제 record", () => {
     expect(useHistoryStore.getState().undoStack).toHaveLength(0);
     expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["a"]);
   });
+
+  it("restorePositions를 주면(휴지통 드래그) 끌려간 위치가 아니라 그 좌표로 복구된다", () => {
+    // 드래그로 휴지통 앞(900,900)까지 끌려간 상태에서 삭제되는 시나리오
+    useCanvasStore.setState({ nodes: [makeNode("a", 900, 900), makeNode("b", 900, 900)] });
+    const restore = new Map([
+      ["a", { x: 10, y: 20 }],
+      ["b", { x: 30, y: 40 }],
+    ]);
+
+    useCanvasStore.getState().applyLocalDeleteNodes(["a", "b"], restore);
+    expect(useCanvasStore.getState().trashedNodes.map((n) => n.position)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+
+    useHistoryStore.getState().undo();
+    const pos = Object.fromEntries(useCanvasStore.getState().nodes.map((n) => [n.id, n.position]));
+    expect(pos.a).toEqual({ x: 10, y: 20 });
+    expect(pos.b).toEqual({ x: 30, y: 40 });
+  });
 });
 
 describe("노드 이동 record (R2.3, R2.7)", () => {
