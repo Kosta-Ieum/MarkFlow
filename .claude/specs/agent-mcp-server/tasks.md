@@ -14,7 +14,7 @@ created: 2026-07-20
   - 요구사항: R1.1(골격), R1.2, R1.3
   - 완료 조건: `pnpm install` 후 `./scripts/check` 통과(mcp typecheck/build 포함 확인), `node dist/index.js`가 env 누락 에러를 올바르게 냄.
 
-- [ ] **T2. AuthManager + REST 클라이언트 + 에러 매핑 + 단위 테스트**
+- [x] **T2. AuthManager + REST 클라이언트 + 에러 매핑 + 단위 테스트**
   - 내용: `auth.ts` — login(Set-Cookie에서 refresh_token 파싱·보관), ensureToken, onUnauthorized(refresh→실패 시 login 폴백→둘 다 실패면 에러, 동시 갱신 promise 합치기), 자격증명·토큰 로그 미출력(R2.4). `api.ts` — Bearer 부착 fetch 래퍼, 401 시 갱신 후 1회 재시도(R2.2), ErrorResponse 파싱. `errors.ts` — REST/ack/network 에러 → isError 텍스트(코드·대상 id·FORBIDDEN 힌트, R6.1~R6.3). 단위 테스트(fetch mock): 쿠키 파싱, 401→refresh→재시도, refresh 409→login 폴백, 인증 실패 시 무한 재시도 없음, 에러 매핑 3종.
   - 요구사항: R2.1~R2.4, R6.1~R6.3
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.
