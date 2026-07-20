@@ -32,6 +32,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   return children;
 }
 
+// 랜딩("/")은 인증 무관 공개 페이지지만, 부팅 복원 동안은 스플래시로 통일한다 —
+// 로그인 상태 확정 전 헤더(로그인/시작하기 ↔ 아바타)가 반대 상태로 깜빡이는 문제 방지.
+function BootBoundary({ children }: ProtectedRouteProps) {
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
+  if (isBootstrapping) return <BootLoading />;
+  return children;
+}
+
 // 인증된 사용자가 /login·/signup에 접근하면 /projects로 리다이렉트(로그인 화면 노출 방지, R9).
 export function PublicOnlyRoute({ children }: ProtectedRouteProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -47,7 +55,14 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/"
+          element={
+            <BootBoundary>
+              <LandingPage />
+            </BootBoundary>
+          }
+        />
         <Route
           path="/login"
           element={
