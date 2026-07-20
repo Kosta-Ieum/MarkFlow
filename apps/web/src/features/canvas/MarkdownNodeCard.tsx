@@ -78,7 +78,10 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
       // nopan: React Flow는 draggable=false인 노드에는 이 클래스를 안 붙여서, 카드 위 클릭이
       // 캔버스 배경 팬(이동) 제스처로 흡수돼 더블클릭이 씹힌다(VIEWER=읽기전용에서 실제로 겪은 버그).
       // draggable=true일 땐 RF가 어차피 자동으로 붙이는 클래스라 중복 추가해도 무해하다.
-      className={`nopan relative w-[186px] rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
+      // select-none: Ctrl(⌘)+드래그로 여러 노드를 마퀴 선택할 때 카드 안 텍스트(제목·미리보기)가
+      // 브라우저 텍스트 선택으로 같이 잡혀 파랗게 강조되던 문제 — 카드는 클릭/더블클릭으로만
+      // 상호작용하지 텍스트를 직접 드래그해 복사할 일이 없어 선택 자체를 막는다.
+      className={`nopan relative w-[186px] select-none rounded-xl border border-line bg-surface shadow-sm transition-shadow ${
         selected ? `ring-[3px] ${style.ring}` : ""
       } ${lockedByOther ? "opacity-80" : ""}`}
       onDoubleClick={handleEnterEdit}
@@ -114,9 +117,11 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
         {collapsed ? (
           <p className="mt-1 truncate font-mono text-xs text-muted">{getPreviewLine(markdown)}</p>
         ) : (
-          // 스크롤로 감춰지면 접힌 것과 다를 게 없다는 피드백 — 높이 제한 없이 전부 펼쳐 보여준다.
-          <div className="mt-1.5 text-xs text-secondary [&_pre]:bg-code-bg [&_pre]:text-code-fg">
+          // 내용이 일정 길이를 넘으면 카드가 한없이 길어지는 대신 최대 높이에서 자르고
+          // 아래쪽을 페이드 처리해 "더 있다"는 걸 표시한다(생략 표시).
+          <div className="relative mt-1.5 max-h-60 overflow-hidden text-xs text-secondary [&_pre]:bg-code-bg [&_pre]:text-code-fg">
             <MDEditor.Markdown source={markdown || "*내용 없음*"} />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-surface to-transparent" />
           </div>
         )}
       </div>

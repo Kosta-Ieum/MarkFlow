@@ -48,7 +48,9 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
     <aside
       // relative + z-30: 캔버스 위 타인 커서 오버레이(z-20, CursorOverlay)보다 쌓임 순서를
       // 높여, 캔버스를 팬해서 커서가 이 영역까지 넘어오면 사이드바 아래로 가려지게 한다.
-      className="relative z-30 flex h-full flex-col border-r border-line bg-surface transition-[width] duration-150"
+      // select-none: 캔버스에서 Ctrl+드래그로 여러 노드를 마퀴 선택할 때, 마우스가 사이드바
+      // 쪽으로 벗어나면 브라우저 텍스트 선택이 사이드바 라벨까지 잡아버리던 문제 방지.
+      className="relative z-30 flex h-full select-none flex-col border-r border-line bg-surface transition-[width] duration-150"
       style={{ width }}
     >
       {expanded ? (

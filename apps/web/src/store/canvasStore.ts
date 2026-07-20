@@ -292,11 +292,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // 소프트 락: 다른 사용자가 md 편집 중인 노드는 이동도 막는다 — 멀티선택으로 함께 끌려온
     // 경우(React Flow가 선택된 노드를 draggable 여부와 무관하게 같이 옮기는 케이스)까지
     // 막으려면 position 변경 자체를 여기서 걸러야 한다(개별 노드 draggable=false만으론 부족).
+    // remove(Delete/Backspace 키 기본 동작)는 React Flow가 하드 삭제로 바로 적용하게 두지
+    // 않고, applyLocalDeleteNode(휴지통 소프트 삭제 + 락 체크 + 실시간 브로드캐스트)를
+    // 거치도록 아래에서 따로 처리한다.
+    const removedIds = changes.filter((c) => c.type === "remove").map((c) => c.id);
     const nonRemove = changes.filter(
       (c) => c.type !== "remove" && !(c.type === "position" && isLockedByOther(c.id)),
     );
     set((state) => ({ nodes: applyNodeChanges(nonRemove, state.nodes) as CanvasNode[] }));
     get().scheduleSave();
+    removedIds.forEach((id) => get().applyLocalDeleteNode(id));
 
     // 드래그 완료(커밋) 시점의 최종 위치만 실시간 전파 — 매 프레임 emit하면
     // 네트워크가 막히고 드롭 후 잔상이 생긴다(과거 프로토타입에서 겪은 문제).
