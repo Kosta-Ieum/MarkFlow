@@ -49,6 +49,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   bootstrap: async () => {
     if (bootstrapStarted) return;
     bootstrapStarted = true;
+    // 스플래시 최소 노출(R2.4) — 복원이 수십 ms 만에 끝나면 한 프레임 깜빡이고 사라져
+    // 로딩이 안 뜬 것처럼 보인다. 애니메이션이 인지될 만큼은 유지한다.
+    const minSplash = new Promise((resolve) => setTimeout(resolve, 600));
     try {
       const token = await refreshAccessToken();
       if (!token) return; // 쿠키 없음/만료 → 비로그인
@@ -61,6 +64,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       // refresh는 됐지만 /auth/me 실패 → 세션 정리(비로그인으로).
       get().clearAuth();
     } finally {
+      await minSplash;
       set({ isBootstrapping: false });
     }
   },

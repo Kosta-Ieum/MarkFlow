@@ -48,6 +48,7 @@ created: 2026-07-20
 - R2.1 WHILE `authStore.isBootstrapping`이 true인 동안, THE SYSTEM SHALL 기존 "불러오는 중…" 텍스트 대신 R1 컴포넌트를 화면 중앙에 표시한다.
 - R2.2 WHEN 부팅 복원이 완료되면, THE SYSTEM SHALL 기존과 동일한 라우팅 동작(인증 시 원래 화면, 미인증 시 /login)을 유지한다.
 - R2.3 WHILE 랜딩("/")에서 부팅 복원이 진행되는 동안, THE SYSTEM SHALL 랜딩 콘텐츠 대신 스플래시를 표시한다 (헤더 로그인 상태 깜빡임 방지). (2026-07-20 추가)
+- R2.4 WHEN 부팅 복원이 최소 노출 시간(600ms)보다 빨리 끝나면, THE SYSTEM SHALL 스플래시를 최소 노출 시간까지 유지한 뒤 전환한다 (한 프레임 깜빡임 방지). (2026-07-20 추가)
 
 ### R3. 캔버스 진입 로딩 적용
 
