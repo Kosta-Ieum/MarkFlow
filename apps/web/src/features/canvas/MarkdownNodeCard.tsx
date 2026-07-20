@@ -2,7 +2,7 @@
 // 화면설계서 §4.4.2: 186px 라운드 카드, 타입 도트+라벨+제목+접기/펼치기.
 // 접힘: 제목 + 첫 비제목 라인 26자 truncate. 펼침: 마크다운 렌더 본문.
 // §4.4 소프트 락 명세: 타인이 편집 중이면 잠금 아이콘+"OO 편집 중" 배지, 본인은 진입 차단(읽기 전용).
-import { memo, useEffect, useRef, useState } from "react";
+import { memo } from "react";
 
 import type { MouseEvent } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
@@ -32,44 +32,27 @@ const TYPE_STYLES: Record<
   data: { label: "DATA", header: "bg-node-data-bg", text: "text-node-data-text", dot: "bg-node-data-dot", ring: "ring-node-data-dot/35" },
 };
 
-// 펼친 본문 높이 상한(R2.1) — text-xs 기준 약 12~14줄. 실화면 보고 조정 가능(design §2).
-const EXPANDED_MAX_HEIGHT = 240;
+// 펼친 본문 줄 수 상한(R2.1) — 다섯 줄까지만 보여주고 나머지는 마지막 줄 글자 뒤에 "…"를
+// 붙인다. 예전엔 박스 높이로 자르고 바닥에 별도 그라데이션+"⋯"를 띄웠는데, "글자 뒤에 바로
+// 붙는 말줄임"을 원한다는 피드백으로 -webkit-line-clamp(여러 줄 자동 말줄임)로 교체.
+const EXPANDED_LINE_CLAMP = 5;
 
-// 펼침 본문 렌더 — 라이트 테마 고정(R1.1) + 높이 상한 & 넘칠 때만 잘림 표시(R2.1/R2.2).
-// "넘쳤는지"는 렌더 후 실제 높이로만 알 수 있어, 내부 콘텐츠를 ResizeObserver로 관찰한다
-// (바깥 박스는 상한에서 크기가 멈추므로 바깥을 관찰하면 이미지 로드 등 늦은 성장을 놓친다).
+// 펼침 본문 렌더 — 라이트 테마 고정(R1.1) + 다섯 줄 말줄임(R2.1/R2.2). 전체 열람은
+// 더블클릭 → 에디터(R2.3).
 function ExpandedMarkdown({ markdown }: { markdown: string }) {
-  const outerRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [isClamped, setIsClamped] = useState(false);
-
-  useEffect(() => {
-    const outer = outerRef.current;
-    const inner = innerRef.current;
-    if (!outer || !inner) return;
-    const measure = () => setIsClamped(outer.scrollHeight > outer.clientHeight + 1);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(inner);
-    return () => observer.disconnect();
-  }, [markdown]);
-
   return (
     <div
-      ref={outerRef}
       // 에디터(node-editor)·휴지통(TrashPanel)과 동일 패턴 — OS 다크모드여도 카드처럼 라이트 렌더.
       data-color-mode="light"
-      style={{ maxHeight: EXPANDED_MAX_HEIGHT }}
-      className="relative mt-1.5 overflow-hidden text-xs text-secondary [&_.wmde-markdown]:bg-transparent [&_pre]:overflow-x-auto [&_pre]:bg-code-bg [&_pre]:text-code-fg [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full"
+      style={{
+        display: "-webkit-box",
+        WebkitLineClamp: EXPANDED_LINE_CLAMP,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
+      }}
+      className="mt-1.5 text-xs text-secondary [&_.wmde-markdown]:bg-transparent [&_pre]:overflow-x-auto [&_pre]:bg-code-bg [&_pre]:text-code-fg [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full"
     >
-      <div ref={innerRef}>
-        <MDEditor.Markdown source={markdown || "*내용 없음*"} />
-      </div>
-      {isClamped && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-10 items-end justify-center bg-gradient-to-t from-surface to-transparent">
-          <span className="pb-0.5 text-sm leading-none text-muted">⋯</span>
-        </div>
-      )}
+      <MDEditor.Markdown source={markdown || "*내용 없음*"} />
     </div>
   );
 }
@@ -106,7 +89,11 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
     toggleCollapse(id);
   };
 
-  const handleEnterEdit = () => {
+  const handleEnterEdit = (e: MouseEvent) => {
+    // 접기/펼치기 버튼이 작아서 두 번 눌렀을 때, click의 stopPropagation과 별개로 브라우저가
+    // 두 클릭을 묶어 별도의 dblclick 이벤트를 카드까지 올려보내 에디터가 열려버리던 문제 —
+    // 버튼(또는 그 안의 다른 버튼) 위에서 난 더블클릭은 여기서 걸러낸다.
+    if ((e.target as HTMLElement).closest("button")) return;
     if (lockedByOther) return; // §4.4 소프트 락: 타인 편집 중이면 진입 차단(읽기 전용)
     // VIEWER(또는 role 미확정)는 편집 권한이 없으니 락을 잡지 않는다 — 노드 에디터는 읽기 전용으로 열림.
     if (role !== null && canEdit(role)) {
@@ -148,7 +135,11 @@ function MarkdownNodeCardInner({ id, data, selected }: NodeProps & { data: Markd
           type="button"
           aria-label={collapsed ? "펼치기" : "접기"}
           onClick={handleToggle}
-          className="ml-auto shrink-0 rounded p-0.5 text-secondary hover:bg-black/5"
+          onDoubleClick={(e) => e.stopPropagation()}
+          // 시각적 크기는 유지하되(음수 마진으로 상쇄) 실제 클릭 판정 영역은 넓혀 잘 안
+          // 눌린다는 피드백을 해소한다. ml-auto와 같은 축(margin-left)을 건드리면 우선순위가
+          // 꼬일 수 있어 위/아래/오른쪽만 상쇄한다.
+          className="ml-auto -my-1.5 -mr-1.5 shrink-0 rounded p-1.5 text-secondary hover:bg-black/5"
         >
           {collapsed ? "▸" : "▾"}
         </button>

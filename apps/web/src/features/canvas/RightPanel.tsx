@@ -46,8 +46,9 @@ export function RightPanel({ projectId, expanded, onToggle }: RightPanelProps) {
   return (
     <aside
       // relative + z-30: CursorOverlay(z-20)보다 위로 — 팬 중인 타인 커서가 이 영역으로
-      // 넘어오면 패널 아래로 가려지게 한다.
-      className="relative z-30 flex h-full flex-col border-l border-line bg-surface transition-[width] duration-150"
+      // 넘어오면 패널 아래로 가려지게 한다. select-none: LeftSidebar와 동일 이유 —
+      // 캔버스에서 Shift+드래그 마퀴 선택 중 마우스가 이 영역으로 넘어가도 텍스트가 잡히지 않게.
+      className="relative z-30 flex h-full select-none flex-col border-l border-line bg-surface transition-[width] duration-150"
       style={{ width: COLLAPSED_WIDTH }}
     >
       <div className="flex items-center justify-center border-b border-line py-3">

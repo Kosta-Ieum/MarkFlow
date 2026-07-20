@@ -310,6 +310,10 @@ export const TrashPanel = forwardRef<TrashPanelHandle, TrashPanelProps>(function
     <div
       ref={containerRef}
       id="mf-trash"
+      // 드래그 중인 노드 카드가 휴지통 목록 위에 보여야 한다(반대로 하면 끌고 가는 카드 자체가
+      // 안 보여서 헷갈린다) — React Flow가 드래그 중인 노드를 elevateNodesOnSelect로
+      // z-index ~1000까지 끌어올리므로, 평소(패널만 봤을 때는 자연스럽게 위) z-index는 그보다
+      // 낮게 유지한다.
       className={`absolute z-10 ${pos ? "" : "transition-[left] duration-150"}`}
       style={{ left, bottom }}
     >

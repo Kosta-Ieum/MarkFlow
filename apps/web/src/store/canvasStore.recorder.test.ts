@@ -80,6 +80,71 @@ describe("노드 삭제 record (R2.2)", () => {
   });
 });
 
+describe("노드 그룹 삭제 record", () => {
+  it("일괄 삭제 = 1 step, undo 한 번에 전부 복구 + 내부·외부 엣지 재생성", () => {
+    useCanvasStore.setState({
+      nodes: [makeNode("a"), makeNode("b", 100, 0), makeNode("c", 200, 0)],
+      edges: [edge("e1", "a", "b"), edge("e2", "b", "c")],
+    });
+
+    useCanvasStore.getState().applyLocalDeleteNodes(["a", "b"]);
+    expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["c"]);
+    expect(useCanvasStore.getState().edges).toHaveLength(0);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    useHistoryStore.getState().undo();
+    expect(useCanvasStore.getState().nodes.map((n) => n.id).sort()).toEqual(["a", "b", "c"]);
+    expect(useCanvasStore.getState().trashedNodes).toHaveLength(0);
+    // e1(삭제 노드 간)·e2(삭제↔생존 간) 모두 같은 id로 복원
+    expect(useCanvasStore.getState().edges.map((e) => e.id).sort()).toEqual(["e1", "e2"]);
+
+    useHistoryStore.getState().redo();
+    expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["c"]);
+    expect(useCanvasStore.getState().trashedNodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1); // redo 재기록 없음(isApplying 가드)
+  });
+
+  it("타인 락 노드는 배치에서 빠지고 나머지만 기록된다", () => {
+    useCanvasStore.setState({ nodes: [makeNode("a"), makeNode("b", 100, 0)] });
+    usePresenceStore.setState({ locks: { b: "other-user" } });
+
+    useCanvasStore.getState().applyLocalDeleteNodes(["a", "b"]);
+    expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["b"]);
+    const stack = useHistoryStore.getState().undoStack;
+    expect(stack).toHaveLength(1);
+    expect(stack[0].nodeIds).toEqual(["a"]);
+  });
+
+  it("전부 락·부재면 record하지 않는다", () => {
+    useCanvasStore.setState({ nodes: [makeNode("a")] });
+    usePresenceStore.setState({ locks: { a: "other-user" } });
+
+    useCanvasStore.getState().applyLocalDeleteNodes(["a", "ghost"]);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("restorePositions를 주면(휴지통 드래그) 끌려간 위치가 아니라 그 좌표로 복구된다", () => {
+    // 드래그로 휴지통 앞(900,900)까지 끌려간 상태에서 삭제되는 시나리오
+    useCanvasStore.setState({ nodes: [makeNode("a", 900, 900), makeNode("b", 900, 900)] });
+    const restore = new Map([
+      ["a", { x: 10, y: 20 }],
+      ["b", { x: 30, y: 40 }],
+    ]);
+
+    useCanvasStore.getState().applyLocalDeleteNodes(["a", "b"], restore);
+    expect(useCanvasStore.getState().trashedNodes.map((n) => n.position)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+
+    useHistoryStore.getState().undo();
+    const pos = Object.fromEntries(useCanvasStore.getState().nodes.map((n) => [n.id, n.position]));
+    expect(pos.a).toEqual({ x: 10, y: 20 });
+    expect(pos.b).toEqual({ x: 30, y: 40 });
+  });
+});
+
 describe("노드 이동 record (R2.3, R2.7)", () => {
   it("멀티 드래그 1회 = 1 step, undo가 모든 노드를 시작 좌표로 되돌린다", () => {
     useCanvasStore.setState({ nodes: [makeNode("a"), makeNode("b", 100, 0)] });
