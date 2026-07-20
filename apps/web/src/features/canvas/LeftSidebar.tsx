@@ -1,4 +1,5 @@
 // 좌측 노드 리스트 사이드바 — 화면설계서 §4.4.1
+import { useState } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { Link } from "react-router-dom";
 
@@ -37,11 +38,45 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
   const readOnly = role !== null && !canEdit(role);
   const selectedNodeId = useCanvasStore((s) => s.nodes.find((n) => n.selected)?.id);
   const selectNode = useCanvasStore((s) => s.selectNode);
+  const applyLocalDeleteNode = useCanvasStore((s) => s.applyLocalDeleteNode);
   const { fitView } = useReactFlow();
+  // 일괄 삭제 — 휴지통과 동일 패턴(TrashPanel). 여러 노드를 하나씩 지우는 게 번거롭다는 피드백.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const handleSelect = (id: string) => {
     selectNode(id);
     void fitView({ nodes: [{ id }], duration: 300, maxZoom: 1.2 });
+  };
+
+  const toggleSelectMode = () => {
+    setSelectMode((v) => !v);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const allSelected = nodes.length > 0 && nodes.every((n) => prev.has(n.id));
+      if (allSelected) return new Set();
+      return new Set(nodes.map((n) => n.id));
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    // 소프트 삭제(휴지통 이동)라 되돌릴 수 있다 — 캔버스의 다른 삭제 경로(Del 키·드래그)와
+    // 동일하게 확인창 없이 바로 처리해 일관성을 맞춘다.
+    selectedIds.forEach((id) => applyLocalDeleteNode(id));
+    setSelectedIds(new Set());
   };
 
   return (
@@ -103,7 +138,37 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
           </div>
 
           <div className="flex-1 overflow-y-auto p-3">
-            <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted">노드 리스트</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted">노드 리스트</p>
+              {!readOnly && nodes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleSelectMode}
+                  className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${
+                    selectMode ? "bg-brand/10 text-brand" : "text-muted hover:bg-canvas"
+                  }`}
+                >
+                  {selectMode ? "완료" : "선택"}
+                </button>
+              )}
+            </div>
+
+            {selectMode && (
+              <div className="mt-1.5 flex items-center justify-between px-1">
+                <button type="button" onClick={toggleSelectAll} className="text-xs font-medium text-brand hover:underline">
+                  {nodes.length > 0 && nodes.every((n) => selectedIds.has(n.id)) ? "전체 해제" : "전체 선택"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={selectedIds.size === 0}
+                  className="rounded-md bg-error-bg px-2 py-0.5 text-xs font-medium text-error disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  선택 삭제 ({selectedIds.size})
+                </button>
+              </div>
+            )}
+
             {nodes.length === 0 ? (
               <div className="mt-2 rounded-lg border border-dashed border-line p-6 text-center text-xs text-muted">
                 아직 노드가 없습니다.
@@ -111,16 +176,25 @@ export function LeftSidebar({ projectId, expanded, onToggle, onAddNode, nodeCoun
             ) : (
               <div className="mt-2 space-y-0.5">
                 {nodes.map((n) => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => handleSelect(n.id)}
-                    className={`block w-full truncate rounded-md px-2 py-1.5 text-left text-sm hover:bg-canvas hover:text-ink ${
-                      n.id === selectedNodeId ? "bg-canvas font-medium text-ink" : "text-secondary"
-                    }`}
-                  >
-                    {n.title || "제목 없음"}
-                  </button>
+                  <div key={n.id} className="flex items-center gap-1.5">
+                    {selectMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(n.id)}
+                        onChange={() => toggleSelected(n.id)}
+                        className="ml-1 shrink-0"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => (selectMode ? toggleSelected(n.id) : handleSelect(n.id))}
+                      className={`block w-full flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm hover:bg-canvas hover:text-ink ${
+                        n.id === selectedNodeId ? "bg-canvas font-medium text-ink" : "text-secondary"
+                      }`}
+                    >
+                      {n.title || "제목 없음"}
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

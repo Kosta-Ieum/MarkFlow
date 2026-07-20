@@ -9,8 +9,7 @@
 // 창이 좁아져 저장된 위치가 화면 밖으로 나가면 렌더링 값만 안쪽으로 클램프하고(저장값은
 // 안 건드림) — 창이 다시 커지면 클램프가 풀리며 원래 위치로 돌아온다.
 // 드래그 중에는 좌표를 캔버스 컨테이너 안쪽으로만 강제해 좌/우 패널 밑에 숨는 것을 막는다.
-import { forwardRef, useLayoutEffect, useRef, useState } from "react";
-import type { ForwardedRef } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { useReactFlow } from "@xyflow/react";
 import MDEditor from "@uiw/react-md-editor";
 
@@ -75,11 +74,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-// style.left/bottom은 캔버스 컨테이너(offsetParent) 기준이라, 우측 채팅 패널 등으로 좁아진
-// 실제 화면 우측 여백을 반영하지 못한다 — getBoundingClientRect로 실제 뷰포트 좌표를 잰다.
-function applyImperativeRef<T>(ref: ForwardedRef<T>, value: T | null) {
-  if (typeof ref === "function") ref(value);
-  else if (ref) ref.current = value;
+function isPointInRectXY(x: number, y: number, rect: DOMRect): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
 const TYPE_DOT: Record<string, string> = {
@@ -95,7 +91,13 @@ interface TrashPanelProps {
   isDragOver: boolean;
 }
 
-export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function TrashPanel(
+/** 부모(CanvasSurface)가 드래그 중인 포인터가 휴지통 위에 있는지 물어보는 용도 — 목록이
+ * 펼쳐져 있으면 목록 영역까지, 접혀 있으면 토글 버튼만 드롭 존으로 인정한다. */
+export interface TrashPanelHandle {
+  isPointOver: (x: number, y: number) => boolean;
+}
+
+export const TrashPanel = forwardRef<TrashPanelHandle, TrashPanelProps>(function TrashPanel(
   { isDragOver },
   ref,
 ) {
@@ -121,7 +123,23 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
   const role = useCanvasStore((s) => s.role);
   const readOnly = role !== null && !canEdit(role);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const { screenToFlowPosition } = useReactFlow();
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      isPointOver: (x, y) => {
+        const buttonRect = containerRef.current?.getBoundingClientRect();
+        if (buttonRect && isPointInRectXY(x, y, buttonRect)) return true;
+        // 목록이 펼쳐져 있으면 그 영역에 드래그해서 놓는 것도 인정한다 — 펼친 목록은
+        // absolute로 컨테이너 밖까지 튀어나가 컨테이너 자체의 bounding rect엔 안 잡힌다.
+        const listRect = open ? listRef.current?.getBoundingClientRect() : undefined;
+        return !!listRect && isPointInRectXY(x, y, listRect);
+      },
+    }),
+    [open],
+  );
   // 캔버스 컨테이너(offsetParent) 크기 — 렌더링 시점의 클램프·기본 위치 계산에만 쓰고,
   // pos(사용자가 드래그로 정한 값)는 이 값 때문에 절대 갱신하지 않는다.
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -227,11 +245,18 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
   };
 
   const hasContent = (markdown: string) => markdown.trim().length > 0;
-  const visibleNodes = trashedNodes.filter((n) => {
-    if (contentFilter === "has") return hasContent(n.data.markdown);
-    if (contentFilter === "empty") return !hasContent(n.data.markdown);
-    return true;
-  });
+  // 최신순(방금 삭제된 게 위로) — deletedAt이 없는 옛 데이터(BE 계약 확장 전)는 맨 뒤로 보낸다.
+  const visibleNodes = trashedNodes
+    .filter((n) => {
+      if (contentFilter === "has") return hasContent(n.data.markdown);
+      if (contentFilter === "empty") return !hasContent(n.data.markdown);
+      return true;
+    })
+    .sort((a, b) => {
+      const at = a.data.deletedAt ? Date.parse(a.data.deletedAt) : -Infinity;
+      const bt = b.data.deletedAt ? Date.parse(b.data.deletedAt) : -Infinity;
+      return bt - at;
+    });
 
   const toggleSelectMode = () => {
     setSelectMode((v) => !v);
@@ -268,12 +293,22 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
     setSelectedIds(new Set());
   };
 
+  const handleBulkRestore = () => {
+    if (selectedIds.size === 0) return;
+    // 캔버스 컨테이너 좌상단 근처를 기준으로 잡아, applyLocalRestoreNode의 겹침 방지
+    // 로직(findFreePosition + resolveOrigin)이 여러 개를 순서대로 배치하게 한다.
+    const parent = containerRef.current?.offsetParent as HTMLElement | null;
+    const rect = parent?.getBoundingClientRect();
+    const origin = rect
+      ? screenToFlowPosition({ x: rect.left + RESTORE_ORIGIN_MARGIN, y: rect.top + RESTORE_ORIGIN_MARGIN })
+      : undefined;
+    selectedIds.forEach((id) => applyLocalRestoreNode(id, origin));
+    setSelectedIds(new Set());
+  };
+
   return (
     <div
-      ref={(node) => {
-        containerRef.current = node;
-        applyImperativeRef(ref, node);
-      }}
+      ref={containerRef}
       id="mf-trash"
       className={`absolute z-10 ${pos ? "" : "transition-[left] duration-150"}`}
       style={{ left, bottom }}
@@ -286,6 +321,7 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
 
       {open && (
         <div
+          ref={listRef}
           className={`absolute z-10 w-64 animate-mfup rounded-2xl border border-line bg-surface p-3 shadow-lg ${
             openUpward ? "bottom-full mb-2" : "top-full mt-2"
           } ${anchorRight ? "right-0" : "left-0"}`}
@@ -339,14 +375,24 @@ export const TrashPanel = forwardRef<HTMLDivElement, TrashPanelProps>(function T
               >
                 {visibleNodes.every((n) => selectedIds.has(n.id)) ? "전체 해제" : "전체 선택"}
               </button>
-              <button
-                type="button"
-                onClick={handleBulkDelete}
-                disabled={selectedIds.size === 0}
-                className="rounded-md bg-error-bg px-2 py-0.5 text-xs font-medium text-error disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                선택 삭제 ({selectedIds.size})
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleBulkRestore}
+                  disabled={selectedIds.size === 0}
+                  className="rounded-md bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  선택 복원 ({selectedIds.size})
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={selectedIds.size === 0}
+                  className="rounded-md bg-error-bg px-2 py-0.5 text-xs font-medium text-error disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  선택 삭제 ({selectedIds.size})
+                </button>
+              </div>
             </div>
           )}
 
