@@ -217,6 +217,9 @@ function CanvasSurface({
         defaultViewport={DEFAULT_VIEWPORT}
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
+        // 핸들 정중앙에 정확히 놓아야만 연결선이 붙던 게 너무 빡빡하다는 피드백 —
+        // 기본 20px에서 넓혀 핸들 주변 적당한 범위에 놓아도 연결되게 한다.
+        connectionRadius={40}
         panOnScroll
         // 기본값은 Backspace+Delete 둘 다인데, 텍스트 편집 중 Backspace를 누르다 실수로
         // 노드가 삭제되는 걸 막기 위해 Delete 키만 허용한다.
