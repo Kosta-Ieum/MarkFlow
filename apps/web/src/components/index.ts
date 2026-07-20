@@ -2,3 +2,5 @@
 export { GlobalHeader } from "./GlobalHeader";
 export { AppShell } from "./AppShell";
 export { BrandLoader } from "./BrandLoader";
+export { BrandMark } from "./BrandMark";
+export { LoadingSplash } from "./LoadingSplash";

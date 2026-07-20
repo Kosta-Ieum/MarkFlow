@@ -2,7 +2,7 @@
 import type { ReactElement } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { AppShell, BrandLoader } from "../components";
+import { AppShell, LoadingSplash } from "../components";
 import { AuthPage } from "../features/auth";
 import { CanvasPage } from "../features/canvas";
 import { ProjectCollabLayout } from "../features/canvas/ProjectCollabLayout";
@@ -18,12 +18,7 @@ interface ProtectedRouteProps {
 
 // 부팅 refresh 진행 중 공통 로딩.
 function BootLoading() {
-  // flow 안(min-h 어림)에서는 헤더 높이만큼 위로 치우친다 — 뷰포트 전체를 덮는 스플래시로 정중앙 보장.
-  return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-app">
-      <BrandLoader />
-    </div>
-  );
+  return <LoadingSplash />;
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
