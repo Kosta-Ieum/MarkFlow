@@ -18,8 +18,9 @@ interface ProtectedRouteProps {
 
 // 부팅 refresh 진행 중 공통 로딩.
 function BootLoading() {
+  // flow 안(min-h 어림)에서는 헤더 높이만큼 위로 치우친다 — 뷰포트 전체를 덮는 스플래시로 정중앙 보장.
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
+    <div className="fixed inset-0 z-40 grid place-items-center bg-app">
       <BrandLoader />
     </div>
   );
