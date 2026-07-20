@@ -29,6 +29,10 @@ export class SocketManager {
   private connecting: Promise<Socket> | null = null;
   private readonly joined = new Set<string>();
   private readonly joinInFlight = new Map<string, Promise<void>>();
+  // 소켓 교체(재로그인·close) 세대 카운터 — connect()가 waitForConnect 대기 중일 때 토큰이
+  // 갱신되면 this.socket이 아직 null이라 onTokenRenewed의 disconnect가 no-op이 되어, 갓 붙은
+  // 소켓이 옛 토큰으로 남는다. 접속 전후 세대를 비교해 그런 소켓을 폐기한다(리뷰 Minor 1).
+  private generation = 0;
 
   constructor(
     private readonly env: Env,
@@ -67,6 +71,7 @@ export class SocketManager {
 
   /** 재로그인(AuthManager onLogin)으로 토큰이 갱신되면 호출 — 기존 소켓을 끊어 다음 접속이 새 토큰을 쓰게 한다. */
   onTokenRenewed(): void {
+    this.generation += 1;
     const socket = this.socket;
     this.socket = null;
     this.joined.clear();
@@ -75,6 +80,7 @@ export class SocketManager {
 
   /** 프로세스 종료용 정리. */
   close(): void {
+    this.generation += 1;
     const socket = this.socket;
     this.socket = null;
     this.joined.clear();
@@ -92,6 +98,9 @@ export class SocketManager {
 
   private async connect(): Promise<Socket> {
     const token = await this.auth.ensureToken();
+    // 토큰 확보 이후의 세대를 기준으로 잡는다 — 이 시점 이후의 재로그인(onTokenRenewed)은
+    // 이 소켓을 낡은 것으로 만든다. (첫 접속을 유발한 login 자신은 여기 진입 전에 이미 반영됨.)
+    const gen = this.generation;
     const socket = io(this.env.MARKFLOW_WS_URL, {
       auth: { token },
       transports: ["websocket"],
@@ -104,6 +113,12 @@ export class SocketManager {
     } catch (err) {
       socket.disconnect();
       throw err;
+    }
+    // 접속 대기 중 토큰이 갱신됐으면 이 소켓은 옛 토큰이라 폐기하고, 다음 호출이 새 토큰으로
+    // 재접속하게 한다(R5.3). onTokenRenewed의 disconnect가 놓친 in-flight 소켓을 여기서 정리.
+    if (this.generation !== gen) {
+      socket.disconnect();
+      throw new McpToolError("SOCKET_CONNECT", "재접속 중 토큰이 갱신되어 다시 시도합니다");
     }
     this.socket = socket;
     return socket;

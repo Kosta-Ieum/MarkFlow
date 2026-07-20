@@ -182,6 +182,25 @@ describe("SocketManager", () => {
     await expect(promise).rejects.toMatchObject({ code: "SOCKET_CONNECT" });
   });
 
+  it("⑦ 접속 대기 중 onTokenRenewed가 나면 갓 붙은 소켓을 폐기하고 SOCKET_CONNECT로 실패한다(Minor 1)", async () => {
+    const manager = new SocketManager(env, auth);
+    const promise = manager.ensureJoined(PID);
+    void promise.catch(() => {});
+    await flushMicro();
+    const s1 = sockets[0]; // connect() 진입, waitForConnect 대기 중(아직 connect 이벤트 없음)
+
+    manager.onTokenRenewed(); // 대기 중 토큰 갱신 → generation++ (this.socket은 아직 null이라 disconnect no-op)
+
+    s1.fire("connect"); // 뒤늦게 접속 완료 — 세대 불일치라 옛 토큰 소켓으로 폐기돼야 한다
+    await expect(promise).rejects.toMatchObject({ code: "SOCKET_CONNECT" });
+    expect(s1.disconnectCount).toBeGreaterThanOrEqual(1);
+
+    // 다음 호출은 새 소켓으로 정상 재접속·재join
+    const s2 = await joinOk(manager);
+    expect(s2).not.toBe(s1);
+    expect(s2.sent.filter((s) => s.event === SOCKET_EVENTS.syncJoin)).toHaveLength(1);
+  });
+
   it("emitWithAck는 ok면 data를 반환하고, targetId와 함께 ok:false는 코드 보존해 throw한다", async () => {
     const manager = new SocketManager(env, auth);
     await joinOk(manager);

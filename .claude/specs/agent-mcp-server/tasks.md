@@ -34,7 +34,39 @@ created: 2026-07-20
   - 요구사항: R4.1~R4.5, R5.1, R5.4, R6.1, R6.2
   - 완료 조건: mcp vitest 통과 + `./scripts/check` 통과.
 
-- [ ] **T6. README + 통합 검증 + 인수 조건 전수 점검**
+- [x] **T6. README + 통합 검증 + 인수 조건 전수 점검**
   - 내용: `apps/mcp/README.md` — 봇 계정 1회 셋업(Gmail `+` 별칭 가입·EDITOR 초대), Claude Code 등록 명령(env 포함), 단일 세션 제약(동시 인스턴스 1개), 로컬/Railway 대상 전환. 통합 검증: 사용자와 함께 봇 계정 준비 후 실등록 → 성공 기준 시나리오(목록→캔버스 읽기→노드 여러 개+엣지 생성) + 브라우저 실시간 확인·presence·VIEWER 거부. requirements 인수 조건 전수 표 작성. **PR 생성 금지(R7.1) — 사용자 승인 대기.**
   - 요구사항: R1~R7 전부
   - 완료 조건: 인수 조건 표에서 코드 검증 가능 항목 미충족 0 + 실계정 E2E는 사용자 확인.
+  - 수행 기록: 전체 스위트 통과(shared 24 · **mcp 52** · web 27 · api 6). MCP 프로토콜 스모크(initialize + tools/list → 10개 툴 노출) 통과. 별도 리뷰어(opus) 브랜치 diff 검토 — blocker/major 0. 리뷰 Minor 1(재로그인 in-flight 소켓 레이스)은 generation guard로 수정 + 회귀 테스트(⑦) 추가. Minor 2(그리드 500슬롯 소진 시 원점 폴백 — FE 동일 동작)·Nit(emitWithAck TOCTOU — R5.3 범위)는 수용.
+
+## 인수 조건 검증 표 (T6)
+
+| 조건 | 검증 방식 | 판정 |
+|---|---|---|
+| R1.1 툴 노출 | 스모크: tools/list → 10개 노출 | 충족 |
+| R1.2 env 설정 | env.ts zod, 하드코딩 없음 | 충족 |
+| R1.3 env 누락 에러 | env.test + 부팅 검증(누락 변수명, 비밀 비노출) | 충족 |
+| R2.1 최초 로그인 | auth.test(ensureToken→login) | 충족 |
+| R2.2 401 재시도 | api.test(401→handleUnauthorized→1회 재시도) | 충족 |
+| R2.3 무한 재시도 금지 | auth.test(refresh→login 폴백→AUTH_FAILED 종료, fetch 횟수 상한) | 충족 |
+| R2.4 자격증명 미노출 | auth/env.test(password·token 문자열 부재) + stdout 프로토콜 전용 | 충족 |
+| R3.1~R3.4 읽기 툴 | read.test(경로·쿼리·입력검증) | 충족 |
+| R4.1~R4.4 편집 툴 | write.test(생성·수정·삭제·복원·엣지) | 충족 |
+| R4.5 zod 입력 검증 | shared 스키마 재사용 + 빈 patch 거부 테스트 | 충족 |
+| R5.1 협업 경로 반영 | 편집=FE 동일 소켓 이벤트/REST(리뷰어 계약 대조) | 충족(코드) / 실시간 반영은 E2E |
+| R5.2 봇 presence | sync:join → 서버 presence:update(코드 경로) | E2E 확인 필요 |
+| R5.3 소켓 재접속 | collab.test(disconnect 리셋·재접속, 재로그인 연쇄, ⑦ 세대 가드) | 충족 |
+| R5.4 락 충돌 전달 | ack {ok:false} 매핑(collab/write.test) | 충족 |
+| R6.1 권한 거부 | errors.test(FORBIDDEN 힌트) | 충족(코드) / VIEWER 거부 E2E |
+| R6.2 NOT_FOUND | write withTarget(대상 id 첨부) | 충족 |
+| R6.3 네트워크 구분 | errors.test(NETWORK vs UNAUTHORIZED) | 충족 |
+| R6.4 프로세스 불사 | runTool try/catch → isError | 충족 |
+| R7.1 PR 미생성 | 브랜치 커밋까지만 — PR 미생성 | 충족 |
+
+### 실계정 E2E 체크리스트 (사용자 확인 필요 — 봇 계정 준비 후)
+- 봇 계정 1회 가입(Gmail `+` 별칭) + 프로젝트 EDITOR 초대
+- Claude Code에 MCP 등록 → list_projects → get_canvas → create_node 여러 개 + connect_edge
+- 브라우저(다른 사용자)에서 새로고침 없이 실시간 반영 확인 (R5.1)
+- 접속자 목록에 봇 표시 (R5.2)
+- VIEWER 프로젝트에서 편집 툴 → FORBIDDEN 반환 (R6.1)
