@@ -9,7 +9,7 @@ created: 2026-07-20
 > 체크박스가 실행 상태의 단일 진실 공급원. 전 태스크 `apps/mcp` 신설 국한(BE·apps/web·shared·openapi 무변경). 검증 = `./scripts/check`(신규 워크스페이스 자동 포함) + mcp vitest.
 > **R7.1: 전 태스크 완료 후에도 사용자 승인 전까지 PR 생성 금지 — 브랜치 커밋까지만.**
 
-- [ ] **T1. 워크스페이스 스캐폴드 + env 검증**
+- [x] **T1. 워크스페이스 스캐폴드 + env 검증**
   - 내용: `apps/mcp` 신설 — package.json(`@markflow/mcp`, deps: `@modelcontextprotocol/sdk`·`socket.io-client`·`zod`·`@markflow/shared workspace:*`, devDeps: vitest·tsx, scripts: typecheck/build/test/dev), tsconfig(base 상속 + NodeNext, 데코레이터 불필요), vitest.config. `src/index.ts` — env 4종(`MARKFLOW_API_BASE`·`MARKFLOW_WS_URL`(기본=API_BASE)·`MARKFLOW_BOT_EMAIL`·`MARKFLOW_BOT_PASSWORD`) zod 검증, 누락 시 변수명 명시 에러(R1.3), 빈 MCP Server + stdio transport 결합(부팅 확인용).
   - 요구사항: R1.1(골격), R1.2, R1.3
   - 완료 조건: `pnpm install` 후 `./scripts/check` 통과(mcp typecheck/build 포함 확인), `node dist/index.js`가 env 누락 에러를 올바르게 냄.
