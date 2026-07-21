@@ -224,6 +224,8 @@ interface CanvasState {
   isLoading: boolean;
   isSaving: boolean;
   saveError: string | null;
+  /** 캔버스 로드 실패 메시지 — 있으면 화면 대신 에러 오버레이(재시도) 표시. */
+  loadError: string | null;
   saveTimer: ReturnType<typeof setTimeout> | null;
 
   // GET/PUT /projects/:id/canvas (openapi 정본) — IEUM-27
@@ -317,10 +319,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   isLoading: false,
   isSaving: false,
   saveError: null,
+  loadError: null,
   saveTimer: null,
 
   loadCanvas: async (projectId) => {
-    set({ isLoading: true, saveError: null, projectId });
+    set({ isLoading: true, saveError: null, loadError: null, projectId });
     try {
       const snapshot = await fetchCanvas(projectId);
       set({
