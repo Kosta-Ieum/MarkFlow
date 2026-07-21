@@ -244,6 +244,16 @@ function CanvasSurface({
           // 기본값은 Backspace+Delete 둘 다인데, 텍스트 편집 중 Backspace를 누르다 실수로
           // 노드가 삭제되는 걸 막기 위해 Delete 키만 허용한다.
           deleteKeyCode="Delete"
+          // 노드 삭제는 배치 액션으로 직접 처리하고 React Flow 기본 삭제 흐름은 취소한다.
+          // 기본 흐름은 연결 엣지를 onEdgesChange의 remove로 흘려보내 각각 "엣지 해제"
+          // undo로 따로 기록해버려, Delete로 그룹을 지운 뒤 한 번 undo하면 노드만 돌아오고
+          // 엣지는 별도 스텝에 남아 사라진 것처럼 보였다. onBeforeDelete에서 가로채 배치
+          // 삭제(연결 엣지 캡처 + 단일 undo 스텝)로 통일한다. 엣지만 삭제할 땐 기본 흐름 유지.
+          onBeforeDelete={async ({ nodes: deletingNodes }) => {
+            if (deletingNodes.length === 0) return true;
+            applyLocalDeleteNodes(deletingNodes.map((n) => n.id));
+            return false;
+          }}
           // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
