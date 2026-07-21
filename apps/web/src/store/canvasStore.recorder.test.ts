@@ -24,6 +24,7 @@ beforeEach(() => {
     edges: [],
     trashedNodes: [],
     projectId: null,
+    role: null,
     saveTimer: null,
   });
   useHistoryStore.getState().clear();
@@ -118,6 +119,15 @@ describe("노드 그룹 삭제 record", () => {
     expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["c"]);
     expect(useCanvasStore.getState().trashedNodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
     expect(useHistoryStore.getState().undoStack).toHaveLength(1); // redo 재기록 없음(isApplying 가드)
+  });
+
+  it("뷰어(VIEWER) role이면 삭제가 no-op이다(방어 심화)", () => {
+    useCanvasStore.setState({ nodes: [makeNode("a"), makeNode("b", 100, 0)], role: "VIEWER" });
+
+    useCanvasStore.getState().applyLocalDeleteNodes(["a", "b"]);
+    expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["a", "b"]);
+    expect(useCanvasStore.getState().trashedNodes).toHaveLength(0);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
   });
 
   it("타인 락 노드는 배치에서 빠지고 나머지만 기록된다", () => {
