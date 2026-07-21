@@ -17,6 +17,7 @@ import {
   type TrashNode,
 } from "../lib/canvasApi";
 import type { CollabAPI } from "../collab/CollabAPI";
+import { canEdit } from "../lib/permissions";
 import { queryClient } from "../lib/queryClient";
 import { queryKeys } from "../lib/queryKeys";
 import { useAuthStore } from "./authStore";
@@ -522,6 +523,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // 멀티선택 일괄 삭제 = undo 1 step — 노드별로 record하면 그룹 삭제를 undo할 때
   // 한 번에 하나씩만 복구되는 문제가 있어, 실제 삭제분 전체를 커맨드 하나로 묶는다.
   applyLocalDeleteNodes: (ids, restorePositions) => {
+    // 방어 심화: 뷰어는 서버가 어차피 403으로 막지만, 낙관적 로컬 삭제가 먼저 일어나면
+    // 화면만 어긋난다(§CV-08). role이 확정된 비편집자면 어느 호출 경로든 여기서 no-op.
+    // (role=null은 로드 전/테스트 — 컴포넌트 readOnly와 동일하게 허용해 흐름을 안 막는다.)
+    const { role } = get();
+    if (role !== null && !canEdit(role)) return;
     const deleted: { id: string; connectedEdges: Edge[] }[] = [];
     for (const id of ids) {
       // 소프트 락: 다른 사용자가 md 편집 중인 노드는 삭제 차단 — 휴지통 드래그·멀티선택 등
