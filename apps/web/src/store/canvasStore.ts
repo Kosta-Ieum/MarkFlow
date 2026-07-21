@@ -251,7 +251,7 @@ interface CanvasState {
   applyLocalDeleteNodes: (ids: string[], restorePositions?: ReadonlyMap<string, XYPosition>) => void;
   /** origin을 주면(화면에 보이는 영역 기준) 그 근처의 안 겹치는 자리로 복원하고, 다른
    * 클라이언트에도 그 위치로 맞추도록 동기화한다. 생략하면 삭제 전 원래 좌표 그대로 복원. */
-  applyLocalRestoreNode: (id: string, origin?: XYPosition) => void;
+  applyLocalRestoreNode: (id: string, origin?: XYPosition) => Promise<void>;
   /** 뒤죽박죽인 노드들을 그리드로 한 번에 정리 — undo 1 step. */
   applyLocalArrangeNodes: () => void;
   /** 영구삭제(물리 삭제) — §CV-16 */
@@ -479,7 +479,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     useHistoryStore.getState().record({
       label: "노드 생성",
       undo: () => get().applyLocalDeleteNode(id),
-      redo: () => get().applyLocalRestoreNode(id),
+      redo: () => {
+        void get().applyLocalRestoreNode(id);
+      },
       nodeIds: [id],
     });
     return id;
@@ -562,13 +564,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     useHistoryStore.getState().record({
       label: deletedIds.length > 1 ? `노드 ${deletedIds.length}개 삭제` : "노드 삭제",
       undo: () => {
-        deletedIds.forEach((id) => get().applyLocalRestoreNode(id));
-        // 전부 복원한 뒤 양쪽 endpoint가 살아있는 엣지만 재생성 — dangling 방지.
-        // (단건이던 기존 동작과 동일: 자기 자신은 방금 복원돼 항상 alive)
-        const alive = new Set(get().nodes.map((n) => n.id));
-        for (const edge of capturedEdges) {
-          if (alive.has(edge.source) && alive.has(edge.target)) get().applyLocalAddEdgeWithId(edge);
-        }
+        const restores = deletedIds.map((id) => get().applyLocalRestoreNode(id));
+        // 엣지 재생성은 복원 REST가 전부 끝난 뒤에 — 서버 createEdge가 "활성 노드만 연결
+        // 가능"을 검증하므로, 노드가 서버에서 아직 소프트삭제 상태일 때 emit하면 거부돼
+        // 로컬에만 남았다가 다음 동기화 때 사라진다(그룹 undo 엣지 소실 버그).
+        void Promise.allSettled(restores).then(() => {
+          // 양쪽 endpoint가 살아있는 엣지만 재생성 — dangling 방지.
+          const alive = new Set(get().nodes.map((n) => n.id));
+          for (const edge of capturedEdges) {
+            if (alive.has(edge.source) && alive.has(edge.target)) get().applyLocalAddEdgeWithId(edge);
+          }
+        });
       },
       // 재귀 record는 historyStore의 isApplying 가드가 막는다.
       redo: () => get().applyLocalDeleteNodes(deletedIds),
@@ -580,7 +586,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   applyLocalRestoreNode: (id, origin) => {
     const { projectId, trashedNodes, nodes } = get();
     const target = trashedNodes.find((n) => n.id === id);
-    if (!target) return;
+    if (!target) return Promise.resolve();
     // BE의 restore()는 위치를 안 건드리고 삭제 전 좌표 그대로 돌려준다 — origin이 없으면
     // (호출자가 화면 기준 위치를 못 구했을 때) 그 좌표를 그대로 쓴다. origin이 있으면
     // "화면에 보이는 자리에서 순서대로, 안 겹치게" 요구사항대로 새로 자리를 잡는다.
@@ -591,23 +597,25 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     // 접힌 상태로 복원 — 삭제 당시 펼쳐져 있던 카드를 그대로 복원하면 실제 렌더 높이가
     // 그리드 배치가 가정하는 높이(NODE_HEIGHT_APPROX)보다 훨씬 커져, 일괄 복원 시 아래
     // 줄과 시각적으로 겹쳐 보이는 원인이 됐다. 항상 접힌 채로 시작해 높이를 예측 가능하게 한다.
-    const node: CanvasNode = { ...target, position, data: { ...restoredData, collapsed: true } };
+    // selected를 벗겨서 복원 — 삭제 당시 선택 상태가 스냅샷에 남아 있으면, 하나씩 복구할
+    // 때마다 전부 선택된 채 돌아와 다음 드래그에서 의도치 않게 같이 끌려다닌다.
+    const node: CanvasNode = { ...target, selected: false, dragging: false, position, data: { ...restoredData, collapsed: true } };
     set((state) => ({
       trashedNodes: state.trashedNodes.filter((n) => n.id !== id),
       nodes: [...state.nodes, node],
     }));
-    if (projectId) {
-      // BE가 복원 처리 후 알아서 다른 클라이언트에 node:add를 브로드캐스트한다(원래 좌표로) —
-      // 위치 동기화용 nodeUpdate는 반드시 그 REST 응답 이후에 보내야 한다. 먼저/동시에 보내면
-      // 다른 클라이언트엔 아직 이 노드가 없는 상태라(nodeAdd가 아직 도착 전) nodeUpdate가
-      // 조용히 무시되고, 뒤늦게 도착한 nodeAdd의 "원래(옛) 좌표"만 남아 위치가 서로 어긋난다.
-      fireAndForget(
-        restoreNodeApi(projectId, id).then(() => {
-          invalidateHistory(projectId);
-          if (origin) activeCollab?.emitNode({ type: "update", node: { id, position } });
-        }),
-      );
-    }
+    if (!projectId) return Promise.resolve();
+    // BE가 복원 처리 후 알아서 다른 클라이언트에 node:add를 브로드캐스트한다(원래 좌표로) —
+    // 위치 동기화용 nodeUpdate는 반드시 그 REST 응답 이후에 보내야 한다. 먼저/동시에 보내면
+    // 다른 클라이언트엔 아직 이 노드가 없는 상태라(nodeAdd가 아직 도착 전) nodeUpdate가
+    // 조용히 무시되고, 뒤늦게 도착한 nodeAdd의 "원래(옛) 좌표"만 남아 위치가 서로 어긋난다.
+    // 반환 promise는 "서버 복원 완료" 신호 — 그룹 undo가 엣지 재생성 타이밍에 쓴다(실패해도 resolve).
+    const done = restoreNodeApi(projectId, id).then(() => {
+      invalidateHistory(projectId);
+      if (origin) activeCollab?.emitNode({ type: "update", node: { id, position } });
+    });
+    fireAndForget(done);
+    return done.catch(() => undefined);
   },
 
   applyLocalPermanentDeleteNode: (id) => {
