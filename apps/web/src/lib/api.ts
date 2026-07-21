@@ -68,25 +68,30 @@ async function captureSessionEndReason(res: Response): Promise<void> {
 
 // refresh 쿠키로 새 access token을 받는 원시 fetch — 표준 api() 401 처리(clearAuth·리다이렉트)를
 // 우회해 재귀·조기 리다이렉트를 방지한다. 실패(401·네트워크) 시 null.
+// 서버가 응답 없이 멈추면 부팅 복원(authStore.bootstrap)이 영영 안 끝나 스플래시가
+// 무한 표시된다 — 타임아웃을 두어 항상 settle(실패=비로그인)시킨다.
+const REFRESH_TIMEOUT_MS = 10_000;
+
 async function rawRefresh(): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
   try {
     const res = await fetch(`${BASE}/auth/refresh`, {
       method: "POST",
       credentials: "include",
+      signal: controller.signal,
     });
-    console.log("🔄 [rawRefresh] 리프레시 응답 상태:", res.status); // 👈 여기 추가
-    
     if (!res.ok) {
-      console.log("🚨 [rawRefresh] 리프레시 실패! 상태코드:", res.status); // 👈 여기 추가
-      await captureSessionEndReason(res); 
+      await captureSessionEndReason(res);
       return null;
     }
     const data = (await res.json()) as { accessToken?: string };
-    console.log("✅ [rawRefresh] 새 토큰 수령 성공!"); // 👈 여기 추가
     return data.accessToken ?? null;
-  } catch (err) {
-    console.error("💥 [rawRefresh] 통신 에러 발생:", err); // 👈 여기 추가
+  } catch {
+    // 네트워크 오류·타임아웃(abort) — 비로그인으로 처리한다.
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -131,15 +136,12 @@ async function request<T>(
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: "include" });
 
   if (res.status === 401) {
-    console.log(`🚨 [api] 401 에러 발생 API: ${path} (리프레시 허용여부: ${allowRefresh})`); 
     // access 만료 추정 — 최초 1회만 refresh 후 원요청 재시도(R1.2).
     if (allowRefresh) {
       const newToken = await refreshAccessToken();
       if (newToken) {
         useAuthStore.getState().setAccessToken(newToken);
         return request<T>(path, init, false);
-      }else {
-        console.log(`❌ [api] 리프레시 실패! newToken 없음. 로그아웃으로 튕겨냅니다.`); 
       }
     }
     // refresh 불가/실패 → 세션 종료(R1.3). clearAuth → ProtectedRoute가 반응형으로 /login 전환.
@@ -156,16 +158,13 @@ async function request<T>(
     let errorBody: ErrorResponse | null = null;
     try {
       errorBody = (await res.json()) as ErrorResponse;
-console.log(`💥 [api] 일반 에러 발생 API: ${path} | 상태: ${res.status} | 내용:`, errorBody);
     } catch {
       // JSON 파싱 실패 시 기본 메시지 사용
-      console.log(`💥 [api] 일반 에러 발생 API: ${path} | 상태: ${res.status} (JSON 파싱 실패)`); 
     }
     const err = errorBody?.error;
 
     // 다른 기기 로그인 등으로 서버가 세션을 강제 종료한 경우 로그아웃 — 전용 코드 또는 409+메시지로 감지.
     if (isSessionEnded(res.status, err)) {
-        console.log(`🛑 [api] 서버가 강제로 세션을 종료시켰습니다! (409 에러 등)`); 
       if (err?.message) stashSessionNotice(err.message);
       useAuthStore.getState().clearAuth(); // ProtectedRoute가 반응형으로 /login 전환(하드 리로드 없음)
     }
