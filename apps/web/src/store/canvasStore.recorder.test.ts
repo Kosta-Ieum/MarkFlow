@@ -24,6 +24,7 @@ beforeEach(() => {
     edges: [],
     trashedNodes: [],
     projectId: null,
+    role: null,
     saveTimer: null,
   });
   useHistoryStore.getState().clear();
@@ -45,8 +46,11 @@ describe("노드 생성 record (R2.1)", () => {
   });
 });
 
+// 그룹 undo의 엣지 재생성은 복원 REST 완료 후로 미뤄진다(allSettled) — 한 틱 대기.
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
 describe("노드 삭제 record (R2.2)", () => {
-  it("undo가 노드를 복원하고 연결 엣지를 같은 id로 재생성한다", () => {
+  it("undo가 노드를 복원하고 연결 엣지를 같은 id로 재생성한다", async () => {
     useCanvasStore.setState({
       nodes: [makeNode("a"), makeNode("b", 100, 0)],
       edges: [edge("e1", "a", "b")],
@@ -58,6 +62,7 @@ describe("노드 삭제 record (R2.2)", () => {
 
     useHistoryStore.getState().undo();
     expect(useCanvasStore.getState().nodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
+    await settle();
     expect(useCanvasStore.getState().edges.map((e) => e.id)).toEqual(["e1"]);
 
     useHistoryStore.getState().redo();
@@ -65,7 +70,7 @@ describe("노드 삭제 record (R2.2)", () => {
     expect(useCanvasStore.getState().edges).toHaveLength(0);
   });
 
-  it("상대 endpoint가 사라진 엣지는 undo에서 재생성하지 않는다(dangling 방지)", () => {
+  it("상대 endpoint가 사라진 엣지는 undo에서 재생성하지 않는다(dangling 방지)", async () => {
     useCanvasStore.setState({
       nodes: [makeNode("a"), makeNode("b", 100, 0)],
       edges: [edge("e1", "a", "b")],
@@ -75,13 +80,24 @@ describe("노드 삭제 record (R2.2)", () => {
     useCanvasStore.getState().applyRemoteDeleteNode("b");
 
     useHistoryStore.getState().undo(); // a 복원 — validator는 a(trash)만 검사
+    await settle();
     expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["a"]);
     expect(useCanvasStore.getState().edges).toHaveLength(0);
+  });
+
+  it("선택된 채 삭제된 노드도 복원 시 선택이 풀려 있다(의도치 않은 그룹 이동 방지)", async () => {
+    useCanvasStore.setState({ nodes: [{ ...makeNode("a"), selected: true }] });
+
+    useCanvasStore.getState().applyLocalDeleteNode("a");
+    useHistoryStore.getState().undo();
+    await settle();
+    const restored = useCanvasStore.getState().nodes.find((n) => n.id === "a");
+    expect(restored?.selected).toBeFalsy();
   });
 });
 
 describe("노드 그룹 삭제 record", () => {
-  it("일괄 삭제 = 1 step, undo 한 번에 전부 복구 + 내부·외부 엣지 재생성", () => {
+  it("일괄 삭제 = 1 step, undo 한 번에 전부 복구 + 내부·외부 엣지 재생성", async () => {
     useCanvasStore.setState({
       nodes: [makeNode("a"), makeNode("b", 100, 0), makeNode("c", 200, 0)],
       edges: [edge("e1", "a", "b"), edge("e2", "b", "c")],
@@ -95,13 +111,23 @@ describe("노드 그룹 삭제 record", () => {
     useHistoryStore.getState().undo();
     expect(useCanvasStore.getState().nodes.map((n) => n.id).sort()).toEqual(["a", "b", "c"]);
     expect(useCanvasStore.getState().trashedNodes).toHaveLength(0);
-    // e1(삭제 노드 간)·e2(삭제↔생존 간) 모두 같은 id로 복원
+    // e1(삭제 노드 간)·e2(삭제↔생존 간) 모두 같은 id로 복원 — 복원 완료 후 재생성이라 한 틱 뒤
+    await settle();
     expect(useCanvasStore.getState().edges.map((e) => e.id).sort()).toEqual(["e1", "e2"]);
 
     useHistoryStore.getState().redo();
     expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["c"]);
     expect(useCanvasStore.getState().trashedNodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
     expect(useHistoryStore.getState().undoStack).toHaveLength(1); // redo 재기록 없음(isApplying 가드)
+  });
+
+  it("뷰어(VIEWER) role이면 삭제가 no-op이다(방어 심화)", () => {
+    useCanvasStore.setState({ nodes: [makeNode("a"), makeNode("b", 100, 0)], role: "VIEWER" });
+
+    useCanvasStore.getState().applyLocalDeleteNodes(["a", "b"]);
+    expect(useCanvasStore.getState().nodes.map((n) => n.id)).toEqual(["a", "b"]);
+    expect(useCanvasStore.getState().trashedNodes).toHaveLength(0);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
   });
 
   it("타인 락 노드는 배치에서 빠지고 나머지만 기록된다", () => {

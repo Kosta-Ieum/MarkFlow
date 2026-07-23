@@ -2,7 +2,7 @@
 // + IEUM-23 [F1-1.3] Zustand 캔버스 스토어 + IEUM-27 [F1-2.1] 캔버스↔DB 연동·자동저장
 // + IEUM-28 [F1-2.2] 휴지통 드래그드롭 + IEUM-34 [F1-3.1] 실시간 소켓 연결
 // + IEUM-35 [F1-3.2] 멀티커서·소프트 락 UI.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -20,7 +20,7 @@ import { canEdit } from "../../lib/permissions";
 import { beginNodeDrag, CANVAS_NODE_EXTENT, emitCursorPosition, useCanvasStore } from "../../store/canvasStore";
 import { useAuthStore } from "../../store/authStore";
 import { usePresenceStore } from "../../store/presenceStore";
-import { LoadingSplash } from "../../components";
+import { BrandMark, LoadingSplash } from "../../components";
 import { CursorOverlay } from "./CursorOverlay";
 import { DeletableEdge } from "./DeletableEdge";
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from "./constants";
@@ -244,6 +244,19 @@ function CanvasSurface({
           // 기본값은 Backspace+Delete 둘 다인데, 텍스트 편집 중 Backspace를 누르다 실수로
           // 노드가 삭제되는 걸 막기 위해 Delete 키만 허용한다.
           deleteKeyCode="Delete"
+          // 노드 삭제는 배치 액션으로 직접 처리하고 React Flow 기본 삭제 흐름은 취소한다.
+          // 기본 흐름은 연결 엣지를 onEdgesChange의 remove로 흘려보내 각각 "엣지 해제"
+          // undo로 따로 기록해버려, Delete로 그룹을 지운 뒤 한 번 undo하면 노드만 돌아오고
+          // 엣지는 별도 스텝에 남아 사라진 것처럼 보였다. onBeforeDelete에서 가로채 배치
+          // 삭제(연결 엣지 캡처 + 단일 undo 스텝)로 통일한다. 엣지만 삭제할 땐 기본 흐름 유지.
+          onBeforeDelete={async ({ nodes: deletingNodes }) => {
+            // 뷰어는 Delete 키로도 삭제 못 하게 막는다 — 드래그·사이드바 경로엔 이미 가드가
+            // 있는데 이 키 경로만 비어 있어, 낙관적 로컬 삭제 후 서버 403으로 화면만 어긋났다.
+            if (readOnly) return false;
+            if (deletingNodes.length === 0) return true;
+            applyLocalDeleteNodes(deletingNodes.map((n) => n.id));
+            return false;
+          }}
           // VIEWER: 노드 이동·연결은 막고, 팬·줌·선택(보기)만 React Flow 기본 동작으로 허용.
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
@@ -288,7 +301,9 @@ export function CanvasPage() {
   // 소켓 연결 생명주기는 ProjectCollabLayout(부모 라우트)이 소유한다 — 캔버스↔노드
   // 에디터를 오가도 연결이 유지되어야 해서 더 위로 옮겼다.
 
-  useEffect(() => {
+  const loadError = useCanvasStore((s) => s.loadError);
+
+  const runLoad = useCallback(() => {
     if (!projectId) return;
     useCanvasStore.getState().loadCanvas(projectId).catch(async (err) => {
       // 동적 import로 ApiError를 가져와 404 처리
@@ -302,14 +317,22 @@ export function CanvasPage() {
         window.location.href = "/projects";
         return;
       }
-      
-      // BE 캔버스 REST(IEUM-24/25)가 아직 구현 전이면 로드가 실패한다 —
-      // 화면설계서 §4.4.2 시드 흐름으로 폴백해 시각 확인을 가능하게 한다.
-      if (useCanvasStore.getState().nodes.length === 0) {
+      // 백엔드 없이 UI만 돌리는 로컬 개발용 시드 폴백은 dev에서만 — 배포 환경에서 로드가
+      // 실패하면 시드(가짜 데이터)를 사용자 프로젝트인 양 보여주는 게 더 위험하므로,
+      // 에러 상태를 세워 재시도 오버레이를 띄운다.
+      if (import.meta.env.DEV && useCanvasStore.getState().nodes.length === 0) {
         useCanvasStore.setState({ nodes: seedNodes, edges: seedEdges, isLoading: false });
+      } else {
+        useCanvasStore.setState({
+          loadError: "캔버스를 불러오지 못했습니다. 네트워크를 확인하고 다시 시도해 주세요.",
+        });
       }
     });
   }, [projectId]);
+
+  useEffect(() => {
+    runLoad();
+  }, [runLoad]);
 
   const role = useCanvasStore((s) => s.role);
   const readOnly = role !== null && !canEdit(role);
@@ -347,6 +370,21 @@ export function CanvasPage() {
           />
         )}
       </div>
+      {loadError && (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-app" role="alert">
+          <div className="flex max-w-sm flex-col items-center gap-4 px-6 text-center">
+            <BrandMark size={48} />
+            <p className="text-sm text-secondary">{loadError}</p>
+            <button
+              type="button"
+              onClick={runLoad}
+              className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-surface hover:opacity-90"
+            >
+              다시 시도
+            </button>
+          </div>
+        </div>
+      )}
     </ReactFlowProvider>
   );
 }

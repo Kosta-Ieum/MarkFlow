@@ -302,7 +302,9 @@ export const TrashPanel = forwardRef<TrashPanelHandle, TrashPanelProps>(function
     const origin = rect
       ? screenToFlowPosition({ x: rect.left + RESTORE_ORIGIN_MARGIN, y: rect.top + RESTORE_ORIGIN_MARGIN })
       : undefined;
-    selectedIds.forEach((id) => applyLocalRestoreNode(id, origin));
+    selectedIds.forEach((id) => {
+      void applyLocalRestoreNode(id, origin);
+    });
     setSelectedIds(new Set());
   };
 
@@ -451,7 +453,7 @@ export const TrashPanel = forwardRef<TrashPanelHandle, TrashPanelProps>(function
                                     y: rect.top + RESTORE_ORIGIN_MARGIN,
                                   })
                                 : undefined;
-                              applyLocalRestoreNode(node.id, origin);
+                              void applyLocalRestoreNode(node.id, origin);
                             }}
                             className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                           >
